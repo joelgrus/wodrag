@@ -132,3 +132,35 @@ def identify_workout_type(text: str) -> Optional[str]:
 2. Create content parser to identify workout types and components
 3. Build validation suite to ensure data quality
 4. Design export formats for RAG system consumption
+
+
+
+.claude/
+└── agents/
+    ├── communications/
+    │   ├── youre-on-mute.md
+    │   ├── your-audio-isnt-working.md
+    │   ├── im-trying-to-share-my-screen.md
+    │   ├── can-everyone-whos-not-talking-go-on-mute.md
+    │   └── lets-take-this-offline.md
+    ├── decision-making/
+    │   ├── let's-circle-back.md
+    │   ├── just-playing-devils-advocate.md
+    │   ├── this-might-be-a-dumb-question.md
+    │   ├── whats-the-action-item.md
+    │   └── maybe-we-need-another-meeting.md
+    ├── engineering/
+    │   ├── works-on-my-machine.md
+    │   ├── lets-rewrite-it-in-rust.md
+    │   ├── this-is-a-feature-not-a-bug.md
+    │   ├── we-should-have-used-rust-for-this.md
+    │   └── we-have-a-script-for-that-somewhere.md
+    ├── strategy/
+    │   ├── is-this-on-the-roadmap.md
+    │   ├── definition-of-done.md
+    │   ├── what-does-success-look-like.md
+    │   └── why-are-we-doing-this-again.md
+    └── testing/
+        ├── maybe-we-need-more-logging.md
+        ├── not-reproducible-on-my-end.md
+        └── try-clearing-your-cache.md
