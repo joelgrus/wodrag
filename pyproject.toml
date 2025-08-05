@@ -22,12 +22,14 @@ dependencies = [
 dev = [
     "mypy>=1.17.1",
     "pytest>=8.4.1",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.12.0",
     "ruff>=0.12.7",
     "types-requests>=2.31.0",
 ]
 
 [tool.setuptools]
-packages = ["wodrag", "wodrag.data_processing"]
+packages = ["wodrag", "wodrag.data_processing", "wodrag.database", "wodrag.agents"]
 
 [tool.mypy]
 python_version = "3.11"
