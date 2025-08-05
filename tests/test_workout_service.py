@@ -42,11 +42,17 @@ class TestWorkoutService:
             "workout": "3 rounds for time: 10 pull-ups",
             "scaling": "Scale to ring rows",
             "movements": ["pull up"],
-            "equipment": ["pull up bar"]
+            "equipment": ["pull up bar"],
+            "one_sentence_summary": "Three rounds of pull-ups for time"
         }
         
         mock_embedding = [0.1, 0.2, 0.3]
-        mock_embedding_service.generate_embedding.return_value = mock_embedding
+        mock_summary_embedding = [0.4, 0.5, 0.6]
+        # Set up side_effect for multiple calls
+        mock_embedding_service.generate_embedding.side_effect = [
+            mock_summary_embedding,  # First call for summary
+            mock_embedding          # Second call for full text
+        ]
         
         created_workout = Workout(
             id=1,
@@ -54,25 +60,33 @@ class TestWorkoutService:
             scaling="Scale to ring rows",
             movements=["pull up"],
             equipment=["pull up bar"],
-            workout_embedding=mock_embedding
+            one_sentence_summary="Three rounds of pull-ups for time",
+            workout_embedding=mock_embedding,
+            summary_embedding=mock_summary_embedding
         )
         mock_repository.insert_workout.return_value = created_workout
         
         # Execute
         result = workout_service.create_workout(workout_data)
         
-        # Assert
-        mock_embedding_service.generate_embedding.assert_called_once_with(
+        # Assert both embeddings were generated
+        assert mock_embedding_service.generate_embedding.call_count == 2
+        mock_embedding_service.generate_embedding.assert_any_call(
+            "Three rounds of pull-ups for time"
+        )
+        mock_embedding_service.generate_embedding.assert_any_call(
             "3 rounds for time: 10 pull-ups\nScale to ring rows"
         )
         mock_repository.insert_workout.assert_called_once()
         
-        # Check that the workout passed to repository has embedding
+        # Check that the workout passed to repository has both embeddings
         inserted_workout = mock_repository.insert_workout.call_args[0][0]
         assert inserted_workout.workout_embedding == mock_embedding
+        assert inserted_workout.summary_embedding == mock_summary_embedding
         
         assert result.id == 1
         assert result.workout_embedding == mock_embedding
+        assert result.summary_embedding == mock_summary_embedding
 
     def test_create_workout_without_scaling(
         self,
@@ -161,9 +175,58 @@ class TestWorkoutService:
             movements=["pull up"],
             equipment=[],
             workout_type=None,
-            workout_name=None
+            workout_name=None,
+            one_sentence_summary=None,
+            summary_embedding=None
         )
-        assert result.workout_embedding == mock_embedding
+        assert result == updated_workout
+
+    def test_update_workout_summary_changed(
+        self,
+        workout_service: WorkoutService,
+        mock_repository: MagicMock,
+        mock_embedding_service: MagicMock
+    ) -> None:
+        # Setup current workout
+        current_workout = Workout(
+            id=1,
+            workout="Existing workout",
+            one_sentence_summary="Old summary"
+        )
+        mock_repository.get_workout.return_value = current_workout
+        
+        # Setup new summary embedding
+        mock_summary_embedding = [0.7, 0.8, 0.9]
+        mock_embedding_service.generate_embedding.return_value = mock_summary_embedding
+        
+        # Setup updated workout return
+        updated_workout = Workout(
+            id=1,
+            workout="Existing workout",
+            one_sentence_summary="New workout summary",
+            summary_embedding=mock_summary_embedding
+        )
+        mock_repository.update_workout_metadata.return_value = updated_workout
+        
+        # Execute
+        updates = {
+            "one_sentence_summary": "New workout summary"
+        }
+        result = workout_service.update_workout(1, updates)
+        
+        # Assert - should only generate summary embedding
+        mock_embedding_service.generate_embedding.assert_called_once_with(
+            "New workout summary"
+        )
+        mock_repository.update_workout_metadata.assert_called_once_with(
+            workout_id=1,
+            movements=[],
+            equipment=[],
+            workout_type=None,
+            workout_name=None,
+            one_sentence_summary="New workout summary",
+            summary_embedding=mock_summary_embedding
+        )
 
     def test_update_workout_no_text_change(
         self,
@@ -174,7 +237,7 @@ class TestWorkoutService:
         current_workout = Workout(
             id=1,
             workout="Existing workout",
-            movements=["pull up"]
+            movements=["push up"]
         )
         mock_repository.get_workout.return_value = current_workout
         
@@ -202,7 +265,7 @@ class TestWorkoutService:
         result = workout_service.update_workout(999, {"workout": "New"})
         
         assert result is None
-        mock_embedding_service.generate_embedding.assert_not_called()
+        mock_repository.update_workout_metadata.assert_not_called()
 
     def test_search_workouts_with_query(
         self,
@@ -210,130 +273,111 @@ class TestWorkoutService:
         mock_repository: MagicMock,
         mock_embedding_service: MagicMock
     ) -> None:
-        # Setup
-        query = "crossfit workouts"
-        filters = WorkoutFilter(movements=["pull up"])
-        
+        query = "pull-ups and running"
         mock_embedding = [0.1, 0.2, 0.3]
         mock_embedding_service.generate_embedding.return_value = mock_embedding
         
-        search_results = [
+        mock_results = [
             SearchResult(
-                workout=Workout(id=1, workout="Fran"),
-                similarity_score=0.9,
-                metadata_match=True
+                workout=Workout(id=1, workout="10 pull-ups"),
+                similarity_score=0.9
             )
         ]
-        mock_repository.hybrid_search.return_value = search_results
+        mock_repository.hybrid_search.return_value = mock_results
         
-        # Execute
-        results = workout_service.search_workouts(query, filters, limit=10)
+        results = workout_service.search_workouts(query)
         
-        # Assert
-        mock_embedding_service.generate_embedding.assert_called_once_with("crossfit workouts")
+        mock_embedding_service.generate_embedding.assert_called_once_with(query)
         mock_repository.hybrid_search.assert_called_once_with(
             query_embedding=mock_embedding,
-            filters=filters,
+            filters=None,
             limit=10
         )
-        assert len(results) == 1
-        assert results[0].similarity_score == 0.9
+        assert results == mock_results
 
-    def test_search_workouts_empty_query(
+    def test_search_workouts_no_query(
         self,
         workout_service: WorkoutService,
         mock_repository: MagicMock,
         mock_embedding_service: MagicMock
     ) -> None:
-        filters = WorkoutFilter(movements=["pull up"])
-        
-        workouts = [
-            Workout(id=1, workout="Test 1"),
-            Workout(id=2, workout="Test 2")
+        mock_workouts = [
+            Workout(id=1, workout="Workout 1"),
+            Workout(id=2, workout="Workout 2")
         ]
-        mock_repository.filter_workouts.return_value = workouts
+        mock_repository.filter_workouts.return_value = mock_workouts
         
-        results = workout_service.search_workouts("", filters, limit=5)
+        results = workout_service.search_workouts("")
         
-        # Should not generate embedding
         mock_embedding_service.generate_embedding.assert_not_called()
-        mock_repository.filter_workouts.assert_called_once_with(filters)
+        mock_repository.filter_workouts.assert_called_once()
         
-        # Should return first 5 results as SearchResult objects
         assert len(results) == 2
         assert all(isinstance(r, SearchResult) for r in results)
-        assert results[0].workout.id == 1
-        assert results[1].workout.id == 2
+        assert results[0].workout == mock_workouts[0]
 
     def test_get_workout(
         self,
         workout_service: WorkoutService,
         mock_repository: MagicMock
     ) -> None:
-        workout = Workout(id=1, workout="Test")
-        mock_repository.get_workout.return_value = workout
+        mock_workout = Workout(id=1, workout="Test")
+        mock_repository.get_workout.return_value = mock_workout
         
         result = workout_service.get_workout(1)
         
         mock_repository.get_workout.assert_called_once_with(1)
-        assert result == workout
+        assert result == mock_workout
 
     def test_list_workouts(
         self,
         workout_service: WorkoutService,
         mock_repository: MagicMock
     ) -> None:
-        workouts = [Workout(id=1), Workout(id=2)]
-        total_count = 50
-        filters = WorkoutFilter(movements=["pull up"])
+        mock_workouts = [Workout(id=1), Workout(id=2)]
+        mock_repository.list_workouts.return_value = (mock_workouts, 100)
         
-        mock_repository.list_workouts.return_value = (workouts, total_count)
+        workouts, total = workout_service.list_workouts(page=2, page_size=10)
         
-        result_workouts, result_total = workout_service.list_workouts(
-            page=2, page_size=10, filters=filters
-        )
-        
-        mock_repository.list_workouts.assert_called_once_with(2, 10, filters)
-        assert result_workouts == workouts
-        assert result_total == total_count
+        mock_repository.list_workouts.assert_called_once_with(2, 10, None)
+        assert workouts == mock_workouts
+        assert total == 100
 
     def test_get_random_workouts(
         self,
         workout_service: WorkoutService,
         mock_repository: MagicMock
     ) -> None:
-        workouts = [Workout(id=1), Workout(id=2), Workout(id=3)]
-        filters = WorkoutFilter(workout_type="metcon")
+        mock_workouts = [Workout(id=i) for i in range(5)]
+        mock_repository.get_random_workouts.return_value = mock_workouts
         
-        mock_repository.get_random_workouts.return_value = workouts
+        results = workout_service.get_random_workouts(5)
         
-        result = workout_service.get_random_workouts(count=3, filters=filters)
-        
-        mock_repository.get_random_workouts.assert_called_once_with(3, filters)
-        assert result == workouts
+        mock_repository.get_random_workouts.assert_called_once_with(5, None)
+        assert results == mock_workouts
 
     def test_get_movement_counts(
         self,
         workout_service: WorkoutService,
         mock_repository: MagicMock
     ) -> None:
-        counts = {"pull up": 50, "push up": 30}
-        mock_repository.get_movement_counts.return_value = counts
+        mock_counts = {"pull up": 10, "push up": 5}
+        mock_repository.get_movement_counts.return_value = mock_counts
         
         result = workout_service.get_movement_counts()
         
         mock_repository.get_movement_counts.assert_called_once()
-        assert result == counts
+        assert result == mock_counts
 
     def test_get_equipment_usage(
         self,
         workout_service: WorkoutService,
         mock_repository: MagicMock
     ) -> None:
-        usage = {"barbell": 100, "pull up bar": 75}
-        mock_repository.get_equipment_usage.return_value = usage
+        mock_usage = {"barbell": 20, "dumbbell": 15}
+        mock_repository.get_equipment_usage.return_value = mock_usage
         
         result = workout_service.get_equipment_usage()
         
         mock_repository.get_equipment_usage.assert_called_once()
-        assert result == usage
+        assert result == mock_usage

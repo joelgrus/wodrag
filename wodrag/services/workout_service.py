@@ -34,7 +34,13 @@ class WorkoutService:
         """
         workout = Workout(**workout_data)
 
-        # Generate embedding if workout text exists
+        # Generate embedding from one-sentence summary if it exists
+        if workout.one_sentence_summary and workout.one_sentence_summary.strip():
+            workout.summary_embedding = self.embedding_service.generate_embedding(
+                workout.one_sentence_summary.strip()
+            )
+
+        # Keep generating full text embedding for backward compatibility
         if workout.workout and workout.workout.strip():
             embedding_text = workout.workout
             if workout.scaling and workout.scaling.strip():
@@ -64,15 +70,24 @@ class WorkoutService:
         if not current_workout:
             return None
 
-        # Check if workout text is being updated
+        # Check if embedding regeneration is needed
         text_changed = "workout" in updates or "scaling" in updates
+        summary_changed = "one_sentence_summary" in updates
 
         # Apply updates
         for key, value in updates.items():
             if hasattr(current_workout, key):
                 setattr(current_workout, key, value)
 
-        # Regenerate embedding if text changed
+        # Regenerate summary embedding if summary changed
+        if summary_changed and current_workout.one_sentence_summary:
+            current_workout.summary_embedding = (
+                self.embedding_service.generate_embedding(
+                    current_workout.one_sentence_summary.strip()
+                )
+            )
+
+        # Regenerate full text embedding if text changed (backward compatibility)
         if text_changed and current_workout.workout:
             embedding_text = current_workout.workout
             if current_workout.scaling and current_workout.scaling.strip():
@@ -89,6 +104,8 @@ class WorkoutService:
             equipment=current_workout.equipment,
             workout_type=current_workout.workout_type,
             workout_name=current_workout.workout_name,
+            one_sentence_summary=current_workout.one_sentence_summary,
+            summary_embedding=current_workout.summary_embedding,
         )
 
     def search_workouts(

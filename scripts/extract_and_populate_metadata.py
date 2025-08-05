@@ -9,18 +9,18 @@ This script:
 4. Handles batching, error recovery, and progress tracking
 """
 
-import argparse
 import logging
 import time
-from datetime import UTC, datetime
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Any
 
 import dspy  # type: ignore
+import typer
 from postgrest.exceptions import APIError
 
 from wodrag.agents.extract_metadata import extractor
 from wodrag.database import Workout, WorkoutRepository
-from wodrag.services import WorkoutService, EmbeddingService
+from wodrag.services import EmbeddingService, WorkoutService
 
 # Configure logging
 logging.basicConfig(
@@ -69,17 +69,11 @@ class MetadataExtractor:
     ) -> list[Workout]:
         """Get workouts that need metadata extraction."""
         try:
-            # Get workouts where metadata fields are null or empty
+            # Get workouts where one_sentence_summary is null
             query = self.repository.client.table("workouts").select("*")
 
-            # Filter for workouts missing metadata
-            query = query.or_(
-                "movements.is.null,"
-                "equipment.is.null,"
-                "workout_type.is.null,"
-                "movements.eq.[],"
-                "equipment.eq.[]"
-            )
+            # Only process workouts missing summary (the key metadata field)
+            query = query.is_("one_sentence_summary", "null")
 
             query = query.order("date", desc=False)  # Process oldest first
 
@@ -95,6 +89,21 @@ class MetadataExtractor:
             logger.error(f"Failed to fetch workouts needing metadata: {e}")
             return []
 
+    def get_total_workouts_needing_metadata(self) -> int:
+        """Get count of workouts that need metadata extraction."""
+        try:
+            # Count workouts where one_sentence_summary is null
+            query = self.repository.client.table("workouts").select("id", count="exact")
+
+            # Only count workouts missing summary (same logic as get_workouts_needing_metadata)
+            query = query.is_("one_sentence_summary", "null")
+
+            result = query.execute()
+            return result.count or 0
+        except APIError as e:
+            logger.error(f"Failed to count workouts needing metadata: {e}")
+            return 0
+
     def extract_metadata_with_retry(self, workout_text: str) -> dict[str, Any] | None:
         """Extract metadata with retry logic."""
         for attempt in range(self.max_retries + 1):
@@ -107,7 +116,8 @@ class MetadataExtractor:
                     'movements': self._validate_movements(result.movements),
                     'equipment': self._validate_equipment(result.equipment),
                     'workout_type': self._validate_workout_type(result.workout_type),
-                    'workout_name': self._validate_workout_name(result.workout_name)
+                    'workout_name': self._validate_workout_name(result.workout_name),
+                    'one_sentence_summary': result.one_sentence_summary.strip()
                 }
 
                 return metadata
@@ -124,7 +134,7 @@ class MetadataExtractor:
 
         return None
 
-    def _validate_movements(self, movements: list[str]) -> list[str]:
+    def _validate_movements(self, movements: Any) -> list[str]:
         """Validate and clean movements list."""
         if not isinstance(movements, list):
             return []
@@ -139,7 +149,7 @@ class MetadataExtractor:
 
         return cleaned[:20]  # Limit to 20 movements max
 
-    def _validate_equipment(self, equipment: list[str]) -> list[str]:
+    def _validate_equipment(self, equipment: Any) -> list[str]:
         """Validate and clean equipment list."""
         if not isinstance(equipment, list):
             return []
@@ -182,13 +192,28 @@ class MetadataExtractor:
             try:
                 workout_id = update['id']
                 metadata = update['metadata']
+                
+                # Generate embedding from summary if it exists
+                summary_embedding = None
+                one_sentence_summary = metadata.get('one_sentence_summary')
+                if one_sentence_summary and one_sentence_summary.strip():
+                    try:
+                        summary_embedding = self.embedding_service.generate_embedding(
+                            one_sentence_summary.strip()
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to generate embedding for workout {workout_id}: {e}"
+                        )
 
                 result = self.repository.update_workout_metadata(
                     workout_id=workout_id,
                     movements=metadata.get('movements'),
                     equipment=metadata.get('equipment'),
                     workout_type=metadata.get('workout_type'),
-                    workout_name=metadata.get('workout_name')
+                    workout_name=metadata.get('workout_name'),
+                    one_sentence_summary=one_sentence_summary,
+                    summary_embedding=summary_embedding
                 )
 
                 if result:
@@ -263,20 +288,32 @@ class MetadataExtractor:
                 if elapsed_time.total_seconds() > 0
                 else 0
             )
-            elapsed_str = str(elapsed_time)
+            elapsed_str = str(elapsed_time).split('.')[0]  # Remove microseconds
         else:
             elapsed_str = "unknown"
             rate = 0.0
 
+        # Get current count of remaining workouts
+        remaining = self.get_total_workouts_needing_metadata()
+        
+        # Calculate ETA if we have a processing rate
+        eta_str = "unknown"
+        if rate > 0 and remaining > 0:
+            eta_seconds = remaining / rate
+            eta_time = datetime.now(UTC) + timedelta(seconds=eta_seconds)
+            eta_str = eta_time.strftime("%H:%M:%S")
+
         logger.info(f"""
 === Progress Report ===
 Total Processed: {self.stats['total_processed']}
+Workouts Remaining: {remaining}
 Successful Updates: {self.stats['successful_updates']}
 Failed Extractions: {self.stats['failed_extractions']}
 Failed Updates: {self.stats['failed_updates']}
 Skipped (No Workout): {self.stats['skipped_no_workout']}
 Elapsed Time: {elapsed_str}
 Processing Rate: {rate:.2f} workouts/second
+Estimated Completion: {eta_str}
 =======================
         """)
 
@@ -292,6 +329,14 @@ Processing Rate: {rate:.2f} workouts/second
             f"Batch size: {self.batch_size}, Resume from offset: {resume_from_offset}"
         )
 
+        # Get initial count of workouts needing metadata
+        total_needing_metadata = self.get_total_workouts_needing_metadata()
+        logger.info(f"Found {total_needing_metadata} workouts needing metadata extraction")
+        
+        if total_needing_metadata == 0:
+            logger.info("✅ No workouts need metadata extraction!")
+            return
+
         if dry_run:
             logger.info("DRY RUN MODE - No database updates will be performed")
 
@@ -299,9 +344,19 @@ Processing Rate: {rate:.2f} workouts/second
         processed_count = 0
 
         while True:
+            # Check if we've already reached the limit
+            if limit and processed_count >= limit:
+                logger.info(f"Reached processing limit of {limit} workouts")
+                break
+
             # Get next batch of workouts
+            # If limit is set and remaining < batch_size, use remaining
+            batch_limit = self.batch_size
+            if limit and (limit - processed_count) < self.batch_size:
+                batch_limit = limit - processed_count
+
             workouts = self.get_workouts_needing_metadata(
-                limit=self.batch_size,
+                limit=batch_limit,
                 offset=offset
             )
 
@@ -317,6 +372,7 @@ Processing Rate: {rate:.2f} workouts/second
                     if workout.workout:
                         metadata = self.extract_metadata_with_retry(workout.workout)
                         logger.info(f"Workout {workout.id}: {metadata}")
+                        logger.info(f"Original Workout Text: {workout.workout}")
                 self.stats['total_processed'] = (
                     int(self.stats['total_processed']) + len(workouts)
                 )
@@ -324,83 +380,64 @@ Processing Rate: {rate:.2f} workouts/second
             processed_count += len(workouts)
             offset += len(workouts)
 
-            # Print progress every 10 batches
-            if processed_count % (self.batch_size * 10) == 0:
+            # Print progress every 5 batches or every 100 workouts (whichever is smaller)
+            progress_interval = min(self.batch_size * 5, 100)
+            if processed_count % progress_interval == 0 or processed_count < 50:
                 self.print_progress()
-
-            # Check if we've hit the limit
-            if limit and processed_count >= limit:
-                logger.info(f"Reached processing limit of {limit} workouts")
-                break
 
         # Final progress report
         self.print_progress()
         logger.info("Metadata extraction completed!")
 
 
-def main() -> None:
-    """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Extract and populate workout metadata"
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=50,
-        help="Number of workouts to process in each batch"
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        help="Maximum number of workouts to process"
-    )
-    parser.add_argument(
-        "--delay",
-        type=float,
-        default=1.0,
-        help="Delay between batches in seconds"
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Run without updating the database"
-    )
-    parser.add_argument(
-        "--resume-from-offset",
-        type=int,
-        default=0,
-        help="Resume processing from this offset"
-    )
-    parser.add_argument(
-        "--max-retries",
-        type=int,
-        default=3,
-        help="Maximum number of retries for failed extractions"
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="openrouter/google/gemini-2.5-flash",
-        help="LLM model to use for extraction"
-    )
+app = typer.Typer(help="Extract and populate workout metadata")
 
-    args = parser.parse_args()
 
+@app.command()
+def main(
+    batch_size: Annotated[
+        int, typer.Option(help="Number of workouts to process in each batch")
+    ] = 50,
+    limit: Annotated[
+        int | None, typer.Option(help="Maximum number of workouts to process")
+    ] = None,
+    delay: Annotated[
+        float, typer.Option(help="Delay between batches in seconds")
+    ] = 1.0,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Run without updating the database")
+    ] = False,
+    resume_from_offset: Annotated[
+        int, typer.Option(help="Resume processing from this offset")
+    ] = 0,
+    max_retries: Annotated[
+        int, typer.Option(help="Maximum number of retries for failed extractions")
+    ] = 3,
+    model: Annotated[
+        str, typer.Option(help="LLM model to use for extraction")
+    ] = "openrouter/google/gemini-2.5-flash-lite",
+) -> None:
+    """
+    Extract and populate workout metadata.
+
+    This command processes workouts in the database, extracts metadata using
+    an AI model, and updates the database with the extracted information.
+    """
     # Configure dspy
-    dspy.configure(lm=dspy.LM(args.model, max_tokens=100000))
+    dspy.configure(lm=dspy.LM(model, max_tokens=100000))
 
     # Create and run extractor
     metadata_extractor = MetadataExtractor(
-        batch_size=args.batch_size,
-        delay_between_batches=args.delay,
-        max_retries=args.max_retries
+        batch_size=batch_size,
+        delay_between_batches=delay,
+        max_retries=max_retries
     )
 
     try:
         metadata_extractor.run(
-            limit=args.limit,
-            dry_run=args.dry_run,
-            resume_from_offset=args.resume_from_offset
+            limit=limit,
+            dry_run=dry_run,
+            resume_from_offset=resume_from_offset
         )
     except KeyboardInterrupt:
         logger.info("Process interrupted by user")
@@ -412,5 +449,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    app()
 

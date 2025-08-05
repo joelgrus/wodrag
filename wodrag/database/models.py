@@ -23,6 +23,8 @@ class Workout:
     equipment: list[str] = field(default_factory=list)
     workout_type: str | None = None
     workout_name: str | None = None
+    one_sentence_summary: str | None = None
+    summary_embedding: list[float] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -41,6 +43,8 @@ class Workout:
             "equipment": self.equipment,
             "workout_type": self.workout_type,
             "workout_name": self.workout_name,
+            "one_sentence_summary": self.one_sentence_summary,
+            "summary_embedding": self.summary_embedding,
         }
         if self.id is not None:
             data["id"] = self.id

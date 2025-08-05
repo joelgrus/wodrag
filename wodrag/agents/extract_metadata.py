@@ -21,7 +21,7 @@ WorkoutType = Literal[
     "team",
     "endurance",
     "skill",
-    "other",
+    "rest day",
 ]
 
 
@@ -39,6 +39,9 @@ class ExtractMetadata(dspy.Signature):
     )
     workout_name: str | None = dspy.OutputField(
         description="Name of the workout, if available."
+    )
+    one_sentence_summary: str = dspy.OutputField(
+        description="A one-sentence summary of the workout."
     )
 
 

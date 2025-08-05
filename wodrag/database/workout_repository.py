@@ -57,6 +57,8 @@ class WorkoutRepository:
         equipment: list[str] | None = None,
         workout_type: str | None = None,
         workout_name: str | None = None,
+        one_sentence_summary: str | None = None,
+        summary_embedding: list[float] | None = None,
     ) -> Workout | None:
         updates: dict[str, Any] = {}
         if movements is not None:
@@ -67,6 +69,10 @@ class WorkoutRepository:
             updates["workout_type"] = workout_type
         if workout_name is not None:
             updates["workout_name"] = workout_name
+        if one_sentence_summary is not None:
+            updates["one_sentence_summary"] = one_sentence_summary
+        if summary_embedding is not None:
+            updates["summary_embedding"] = summary_embedding
 
         if not updates:
             return self.get_workout(workout_id)

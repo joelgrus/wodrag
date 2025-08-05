@@ -109,6 +109,7 @@ def insert_workout_with_embedding(
         embedding = generate_embedding(openai_client, embedding_text)
         
         # Insert workout with embedding
+        # Note: summary_embedding will be generated later when metadata is extracted
         client.table("workouts").insert({
             "date": workout["date"],
             "url": workout["url"],
