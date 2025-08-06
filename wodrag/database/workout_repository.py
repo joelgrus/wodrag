@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
 from datetime import date
-from typing import Any
+from typing import Any, Generator
 
 import psycopg2
 from postgrest.exceptions import APIError
@@ -18,26 +19,32 @@ class WorkoutRepository:
     def __init__(self, client: Client | None = None):
         self.client = client or get_supabase_client()
         self.table_name = "workouts"
-        self._pg_conn = None
 
-    def _get_pg_connection(self):
-        """Get a direct PostgreSQL connection for raw SQL queries."""
-        if self._pg_conn is None or self._pg_conn.closed:
-            # Get connection string from environment
-            db_url = os.getenv("DATABASE_URL")
-            if not db_url:
-                # Construct from Supabase environment variables
-                supabase_url = os.getenv("SUPABASE_URL", "")
-                db_password = os.getenv("SUPABASE_DB_PASSWORD") or os.getenv("DB_PASSWORD") or os.getenv("POSTGRES_PASSWORD")
-                
-                if "supabase.co" in supabase_url and db_password:
-                    project_id = supabase_url.split("//")[1].split(".")[0]
-                    db_url = f"postgresql://postgres.{project_id}:{db_password}@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-                else:
-                    raise RuntimeError("Need DATABASE_URL or SUPABASE_DB_PASSWORD environment variable for direct PostgreSQL access")
-                
-            self._pg_conn = psycopg2.connect(db_url)
-        return self._pg_conn
+    def _get_database_url(self) -> str:
+        """Get PostgreSQL connection URL from environment."""
+        db_url = os.getenv("DATABASE_URL")
+        if db_url:
+            return db_url
+            
+        # Construct from Supabase environment variables
+        supabase_url = os.getenv("SUPABASE_URL", "")
+        db_password = os.getenv("SUPABASE_DB_PASSWORD") or os.getenv("DB_PASSWORD") or os.getenv("POSTGRES_PASSWORD")
+        
+        if "supabase.co" in supabase_url and db_password:
+            project_id = supabase_url.split("//")[1].split(".")[0]
+            return f"postgresql://postgres.{project_id}:{db_password}@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+        
+        raise RuntimeError("Need DATABASE_URL or SUPABASE_DB_PASSWORD environment variable for direct PostgreSQL access")
+    
+    @contextmanager
+    def _get_pg_connection(self) -> Generator[psycopg2.extensions.connection, None, None]:
+        """Get a direct PostgreSQL connection with proper cleanup."""
+        db_url = self._get_database_url()
+        conn = psycopg2.connect(db_url)
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     # CRUD Operations
 
@@ -141,20 +148,20 @@ class WorkoutRepository:
             query_embedding = embedding_service.generate_embedding(query_text)
             
             # 2. Execute raw SQL with vector similarity using psycopg2
-            conn = self._get_pg_connection()
-            with conn.cursor() as cursor:
-                sql = """
-                SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
-                FROM workouts 
-                WHERE summary_embedding IS NOT NULL 
-                ORDER BY summary_embedding <=> %s::vector 
-                LIMIT %s
-                """
-                cursor.execute(sql, (query_embedding, query_embedding, limit))
-                rows = cursor.fetchall()
-                
-                # Get column names
-                columns = [desc[0] for desc in cursor.description]
+            with self._get_pg_connection() as conn:
+                with conn.cursor() as cursor:
+                    sql = """
+                    SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
+                    FROM workouts 
+                    WHERE summary_embedding IS NOT NULL 
+                    ORDER BY summary_embedding <=> %s::vector 
+                    LIMIT %s
+                    """
+                    cursor.execute(sql, (query_embedding, query_embedding, limit))
+                    rows = cursor.fetchall()
+                    
+                    # Get column names
+                    columns = [desc[0] for desc in cursor.description] if cursor.description else []
                 
             # Convert to SearchResults
             search_results = []
@@ -172,7 +179,7 @@ class WorkoutRepository:
             
             return search_results
             
-        except Exception as e:
+        except (psycopg2.Error, ValueError) as e:
             raise RuntimeError(f"Failed to search summaries: {e}") from e
 
     def vector_search(
@@ -183,21 +190,21 @@ class WorkoutRepository:
     ) -> list[SearchResult]:
         try:
             # Execute raw SQL with vector similarity using psycopg2
-            conn = self._get_pg_connection()
-            with conn.cursor() as cursor:
-                sql = """
-                SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
-                FROM workouts 
-                WHERE summary_embedding IS NOT NULL 
-                AND 1 - (summary_embedding <=> %s::vector) >= %s
-                ORDER BY summary_embedding <=> %s::vector 
-                LIMIT %s
-                """
-                cursor.execute(sql, (query_embedding, query_embedding, similarity_threshold, query_embedding, limit))
-                rows = cursor.fetchall()
-                
-                # Get column names
-                columns = [desc[0] for desc in cursor.description]
+            with self._get_pg_connection() as conn:
+                with conn.cursor() as cursor:
+                    sql = """
+                    SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
+                    FROM workouts 
+                    WHERE summary_embedding IS NOT NULL 
+                    AND 1 - (summary_embedding <=> %s::vector) >= %s
+                    ORDER BY summary_embedding <=> %s::vector 
+                    LIMIT %s
+                    """
+                    cursor.execute(sql, (query_embedding, query_embedding, similarity_threshold, query_embedding, limit))
+                    rows = cursor.fetchall()
+                    
+                    # Get column names
+                    columns = [desc[0] for desc in cursor.description] if cursor.description else []
 
             search_results = []
             for row in rows:
@@ -213,7 +220,7 @@ class WorkoutRepository:
                 )
 
             return search_results
-        except Exception as e:
+        except (psycopg2.Error, ValueError) as e:
             raise RuntimeError(f"Failed to perform vector search: {e}") from e
 
     def _matches_filters(self, workout: Workout, filters: WorkoutFilter | None) -> bool:

@@ -135,9 +135,9 @@ class WorkoutService:
         # Generate embedding for query
         query_embedding = self.embedding_service.generate_embedding(query.strip())
 
-        # Perform hybrid search
-        return self.repository.hybrid_search(
-            query_embedding=query_embedding, filters=filters, limit=limit
+        # Perform semantic search on summaries
+        return self.repository.search_summaries(
+            query_text=query.strip(), limit=limit
         )
 
     def get_workout(self, workout_id: int) -> Workout | None:

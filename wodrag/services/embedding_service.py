@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 import openai
+from openai import OpenAI
 
 
 class EmbeddingService:
@@ -16,10 +17,11 @@ class EmbeddingService:
             model: OpenAI embedding model to use
         """
         self.model = model
-        # Set API key from environment
-        openai.api_key = os.getenv("OPENAI_API_KEY")
-        if not openai.api_key:
+        # Initialize OpenAI client with API key from environment
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
+        self.client = OpenAI(api_key=api_key)
 
     def generate_embedding(self, text: str) -> list[float]:
         """
@@ -38,9 +40,9 @@ class EmbeddingService:
             raise ValueError("Text cannot be empty")
 
         try:
-            response = openai.embeddings.create(model=self.model, input=text.strip())
+            response = self.client.embeddings.create(model=self.model, input=text.strip())
             return response.data[0].embedding
-        except Exception as e:
+        except (openai.OpenAIError, ValueError) as e:
             raise RuntimeError(f"Failed to generate embedding: {e}") from e
 
     def generate_batch_embeddings(self, texts: list[str]) -> list[list[float]]:
@@ -72,7 +74,7 @@ class EmbeddingService:
             raise ValueError("All texts are empty")
 
         try:
-            response = openai.embeddings.create(model=self.model, input=non_empty_texts)
+            response = self.client.embeddings.create(model=self.model, input=non_empty_texts)
 
             # Create result list with same length as input
             embeddings: list[list[float]] = [[] for _ in texts]
@@ -84,5 +86,5 @@ class EmbeddingService:
 
             return embeddings
 
-        except Exception as e:
+        except (openai.OpenAIError, ValueError) as e:
             raise RuntimeError(f"Failed to generate batch embeddings: {e}") from e
