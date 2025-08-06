@@ -3,7 +3,7 @@ from .workout_repository import WorkoutRepository
 
 __all__ = [
     "Workout",
-    "WorkoutFilter", 
+    "WorkoutFilter",
     "SearchResult",
     "WorkoutRepository",
 ]
