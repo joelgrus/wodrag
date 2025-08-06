@@ -1,29 +1,22 @@
 #!/usr/bin/env python3
-"""Generate OpenAI embeddings from one-sentence summaries and update Supabase."""
+"""Generate OpenAI embeddings from one-sentence summaries and update ParadeDB."""
 
 import os
+import sys
 from typing import Any, List
 import time
 
 from dotenv import load_dotenv
 from openai import OpenAI
-from supabase import create_client, Client
+import psycopg2
+
+# Add the parent directory to Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from wodrag.database.client import get_postgres_connection
 
 # Load environment variables
 load_dotenv()
-
-
-def get_supabase_client() -> Client:
-    """Create and return a Supabase client."""
-    url = os.getenv("SUPABASE_URL")
-    key = os.getenv("SUPABASE_ANON_KEY")
-    
-    if not url or not key:
-        raise ValueError(
-            "Missing Supabase credentials. Please set SUPABASE_URL and SUPABASE_ANON_KEY"
-        )
-    
-    return create_client(url, key)
 
 
 def get_openai_client() -> OpenAI:

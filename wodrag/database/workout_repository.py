@@ -6,77 +6,44 @@ from datetime import date
 from typing import Any, Generator
 
 import psycopg2
-from postgrest.exceptions import APIError
-from supabase import Client
 
-from .client import get_supabase_client
+from .client import get_postgres_connection
 from .models import SearchResult, Workout, WorkoutFilter
 
 
 class WorkoutRepository:
     """Repository for workout database operations."""
 
-    def __init__(self, client: Client | None = None):
-        self.client = client or get_supabase_client()
+    def __init__(self):
         self.table_name = "workouts"
 
-    def _get_database_url(self) -> str:
-        """Get PostgreSQL connection URL from environment."""
-        db_url = os.getenv("DATABASE_URL")
-        if db_url:
-            return db_url
-            
-        # Construct from Supabase environment variables
-        supabase_url = os.getenv("SUPABASE_URL", "")
-        db_password = os.getenv("SUPABASE_DB_PASSWORD") or os.getenv("DB_PASSWORD") or os.getenv("POSTGRES_PASSWORD")
-        
-        if "supabase.co" in supabase_url and db_password:
-            project_id = supabase_url.split("//")[1].split(".")[0]
-            return f"postgresql://postgres.{project_id}:{db_password}@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
-        
-        raise RuntimeError("Need DATABASE_URL or SUPABASE_DB_PASSWORD environment variable for direct PostgreSQL access")
     
     @contextmanager
     def _get_pg_connection(self) -> Generator[psycopg2.extensions.connection, None, None]:
         """Get a direct PostgreSQL connection with proper cleanup."""
-        db_url = self._get_database_url()
-        conn = psycopg2.connect(db_url)
-        try:
+        with get_postgres_connection() as conn:
             yield conn
-        finally:
-            conn.close()
 
     # CRUD Operations
 
     def insert_workout(self, workout: Workout) -> Workout:
-        """
-        Insert a workout into the database.
-
-        Args:
-            workout: Workout object to insert (should include embedding if needed)
-
-        Returns:
-            Inserted workout with database-assigned ID
-        """
-        data = workout.to_dict()
-
-        try:
-            result = self.client.table(self.table_name).insert(data).execute()
-            return Workout.from_dict(result.data[0])
-        except APIError as e:
-            raise RuntimeError(f"Failed to insert workout: {e}") from e
+        """Insert a workout into the database using PostgreSQL."""
+        # TODO: Implement PostgreSQL-based insert if needed
+        raise NotImplementedError("Use direct SQL or import scripts for PostgreSQL inserts")
 
     def get_workout(self, workout_id: int) -> Workout | None:
+        """Get a single workout by ID using PostgreSQL."""
         try:
-            result = (
-                self.client.table(self.table_name)
-                .select("*")
-                .eq("id", workout_id)
-                .single()
-                .execute()
-            )
-            return Workout.from_dict(result.data) if result.data else None
-        except APIError:
+            with self._get_pg_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT * FROM workouts WHERE id = %s", (workout_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        columns = [desc[0] for desc in cursor.description] if cursor.description else []
+                        row_dict = dict(zip(columns, row))
+                        return Workout.from_dict(row_dict)
+                    return None
+        except psycopg2.Error:
             return None
 
     def update_workout_metadata(
@@ -106,22 +73,18 @@ class WorkoutRepository:
         if not updates:
             return self.get_workout(workout_id)
 
-        try:
-            result = (
-                self.client.table(self.table_name)
-                .update(updates)
-                .eq("id", workout_id)
-                .execute()
-            )
-            return Workout.from_dict(result.data[0]) if result.data else None
-        except APIError as e:
-            raise RuntimeError(f"Failed to update workout: {e}") from e
+        # TODO: Implement PostgreSQL-based update if needed
+        raise NotImplementedError("Use direct SQL for PostgreSQL updates")
 
     def delete_workout(self, workout_id: int) -> bool:
+        """Delete a workout using PostgreSQL."""
         try:
-            self.client.table(self.table_name).delete().eq("id", workout_id).execute()
-            return True
-        except APIError:
+            with self._get_pg_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("DELETE FROM workouts WHERE id = %s", (workout_id,))
+                    conn.commit()
+                    return cursor.rowcount > 0
+        except psycopg2.Error:
             return False
 
     # Search Methods
@@ -188,20 +151,21 @@ class WorkoutRepository:
         limit: int = 50,
     ) -> list[SearchResult]:
         """
-        Full-text search using websearch syntax.
+        Full-text search using ParadeDB BM25 ranking.
         
         Supports:
         - "phrase search" - exact phrase matching
         - word1 OR word2 - either term
-        - word1 -word2 - exclude word2
-        - word1 word2 - both terms (implicit AND)
+        - word1 AND word2 - both terms
+        - word1 NOT word2 - exclude word2
+        - Complex boolean queries
         
         Args:
-            query: Search query text with optional quotes, OR, minus
+            query: Search query text 
             limit: Maximum number of results
             
         Returns:
-            List of search results ordered by text rank
+            List of search results ordered by BM25 score
         """
         try:
             if not query.strip():
@@ -209,16 +173,22 @@ class WorkoutRepository:
                 
             with self._get_pg_connection() as conn:
                 with conn.cursor() as cursor:
+                    # Use ParadeDB's BM25 search with boolean query
                     sql = """
-                    SELECT *, 
-                           ts_rank_cd(workout_search_vector, query, 1) as rank
-                    FROM workouts, 
-                         websearch_to_tsquery('english', %s) query
-                    WHERE workout_search_vector @@ query
-                    ORDER BY rank DESC
+                    SELECT w.*, paradedb.score(w.id) as bm25_score
+                    FROM workouts w
+                    WHERE w @@@ paradedb.boolean(
+                        should => ARRAY[
+                            paradedb.match('workout', %s),
+                            paradedb.match('one_sentence_summary', %s),
+                            paradedb.match('workout_name', %s),
+                            paradedb.match('scaling', %s)
+                        ]
+                    )
+                    ORDER BY bm25_score DESC
                     LIMIT %s
                     """
-                    cursor.execute(sql, (query, limit))
+                    cursor.execute(sql, (query, query, query, query, limit))
                     rows = cursor.fetchall()
                     
                     # Get column names
@@ -228,14 +198,12 @@ class WorkoutRepository:
             search_results = []
             for row in rows:
                 row_dict = dict(zip(columns, row))
-                rank_score = row_dict.pop("rank", 0.0)
-                # Remove the query column that comes from the CTE
-                row_dict.pop("query", None)
+                bm25_score = row_dict.pop("bm25_score", 0.0)
                 workout = Workout.from_dict(row_dict)
                 search_results.append(
                     SearchResult(
                         workout=workout,
-                        similarity_score=rank_score,  # Store rank as similarity for now
+                        similarity_score=bm25_score,
                         metadata_match=True,
                     )
                 )
@@ -243,7 +211,8 @@ class WorkoutRepository:
             return search_results
             
         except (psycopg2.Error, ValueError) as e:
-            raise RuntimeError(f"Failed to perform text search: {e}") from e
+            raise RuntimeError(f"Failed to perform BM25 search: {e}") from e
+    
     
     def _merge_search_results(
         self,
@@ -466,70 +435,18 @@ class WorkoutRepository:
         return dot_product / (magnitude1 * magnitude2)
 
     def filter_workouts(self, filters: WorkoutFilter) -> list[Workout]:
-        query = self.client.table(self.table_name).select("*")
-
-        if filters.movements:
-            query = query.contains("movements", filters.movements)
-
-        if filters.equipment:
-            query = query.overlaps("equipment", filters.equipment)
-
-        if filters.workout_type:
-            query = query.eq("workout_type", filters.workout_type)
-
-        if filters.workout_name:
-            query = query.eq("workout_name", filters.workout_name)
-
-        if filters.start_date:
-            query = query.gte("date", filters.start_date.isoformat())
-
-        if filters.end_date:
-            query = query.lte("date", filters.end_date.isoformat())
-
-        if filters.has_video is not None:
-            query = query.eq("has_video", filters.has_video)
-
-        if filters.has_article is not None:
-            query = query.eq("has_article", filters.has_article)
-
-        try:
-            result = query.execute()
-            return [Workout.from_dict(row) for row in result.data]
-        except APIError as e:
-            raise RuntimeError(f"Failed to filter workouts: {e}") from e
+        """Filter workouts using PostgreSQL."""
+        # TODO: Implement PostgreSQL-based filtering if needed
+        raise NotImplementedError("Use direct SQL for PostgreSQL filtering")
 
     # Listing/Browsing
 
     def list_workouts(
         self, page: int = 1, page_size: int = 20, filters: WorkoutFilter | None = None
     ) -> tuple[list[Workout], int]:
-        offset = (page - 1) * page_size
-
-        query = self.client.table(self.table_name).select("*", count="exact")
-
-        if filters:
-            if filters.movements:
-                query = query.contains("movements", filters.movements)
-            if filters.equipment:
-                query = query.overlaps("equipment", filters.equipment)
-            if filters.workout_type:
-                query = query.eq("workout_type", filters.workout_type)
-            if filters.workout_name:
-                query = query.eq("workout_name", filters.workout_name)
-            if filters.start_date:
-                query = query.gte("date", filters.start_date.isoformat())
-            if filters.end_date:
-                query = query.lte("date", filters.end_date.isoformat())
-
-        query = query.order("date", desc=True).limit(page_size).offset(offset)
-
-        try:
-            result = query.execute()
-            workouts = [Workout.from_dict(row) for row in result.data]
-            total_count = result.count or 0
-            return workouts, total_count
-        except APIError as e:
-            raise RuntimeError(f"Failed to list workouts: {e}") from e
+        """List workouts using PostgreSQL."""
+        # TODO: Implement PostgreSQL-based listing if needed
+        raise NotImplementedError("Use direct SQL for PostgreSQL listing")
 
     def get_workouts_by_date_range(
         self, start_date: date, end_date: date

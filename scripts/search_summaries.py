@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 # Add the parent directory to Python path to import wodrag modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from wodrag.database.client import get_supabase_client
+# PostgreSQL-only, no Supabase needed
 from wodrag.database.models import WorkoutFilter
 from wodrag.database.workout_repository import WorkoutRepository
 from wodrag.services.embedding_service import EmbeddingService
@@ -45,8 +45,7 @@ def search(
     
     try:
         # Initialize services
-        client = get_supabase_client()
-        repository = WorkoutRepository(client)
+        repository = WorkoutRepository()
         
         # Build filters
         filters = WorkoutFilter()
@@ -113,8 +112,7 @@ def test_vector_search() -> None:
     
     try:
         # Initialize services
-        client = get_supabase_client()
-        repository = WorkoutRepository(client)
+        repository = WorkoutRepository()
         embedding_service = EmbeddingService()
         
         # Sample test queries

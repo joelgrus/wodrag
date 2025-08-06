@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: paradedb/paradedb:latest
+    container_name: wodrag_paradedb
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: wodrag
+      POSTGRES_USER: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/paradedb:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wodrag"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
