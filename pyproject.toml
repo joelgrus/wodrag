@@ -5,8 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wodrag"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "CrossFit workout search system with hybrid BM25 and semantic search"
 requires-python = ">=3.11"
 dependencies = [
     "dspy>=2.6.27",
@@ -17,6 +16,7 @@ dependencies = [
     "openai>=1.57.0",
     "typer>=0.15.1",
     "psycopg2-binary>=2.9.0",
+    "duckdb>=1.1.0",
 ]
 
 [dependency-groups]

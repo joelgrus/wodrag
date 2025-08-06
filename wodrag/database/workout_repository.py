@@ -38,9 +38,7 @@ class WorkoutRepository:
         """Get a single workout by ID using PostgreSQL."""
         try:
             with self._get_pg_connection() as conn, conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT * FROM workouts WHERE id = %s", (workout_id,)
-                )
+                cursor.execute("SELECT * FROM workouts WHERE id = %s", (workout_id,))
                 row = cursor.fetchone()
                 if row:
                     columns = (
@@ -142,9 +140,7 @@ class WorkoutRepository:
 
             rows = cursor.fetchall()
             columns = (
-                [desc[0] for desc in cursor.description]
-                if cursor.description
-                else []
+                [desc[0] for desc in cursor.description] if cursor.description else []
             )
             return [(row, columns) for row in rows]
 

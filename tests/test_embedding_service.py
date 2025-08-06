@@ -28,36 +28,40 @@ class TestEmbeddingService:
 
         assert "OPENAI_API_KEY environment variable is required" in str(exc_info.value)
 
-    @patch("wodrag.services.embedding_service.openai.embeddings.create")
+    @patch("wodrag.services.embedding_service.OpenAI")
     @patch("wodrag.services.embedding_service.os.getenv")
     def test_generate_embedding_success(
-        self, mock_getenv: MagicMock, mock_create: MagicMock
+        self, mock_getenv: MagicMock, mock_openai: MagicMock
     ) -> None:
         mock_getenv.return_value = "test-api-key"
         mock_embedding = [0.1, 0.2, 0.3, 0.4]
-        mock_create.return_value.data = [MagicMock(embedding=mock_embedding)]
+        mock_client = MagicMock()
+        mock_openai.return_value = mock_client
+        mock_client.embeddings.create.return_value.data = [MagicMock(embedding=mock_embedding)]
 
         service = EmbeddingService()
         result = service.generate_embedding("test text")
 
         assert result == mock_embedding
-        mock_create.assert_called_once_with(
+        mock_client.embeddings.create.assert_called_once_with(
             model="text-embedding-3-small", input="test text"
         )
 
-    @patch("wodrag.services.embedding_service.openai.embeddings.create")
+    @patch("wodrag.services.embedding_service.OpenAI")
     @patch("wodrag.services.embedding_service.os.getenv")
     def test_generate_embedding_strips_whitespace(
-        self, mock_getenv: MagicMock, mock_create: MagicMock
+        self, mock_getenv: MagicMock, mock_openai: MagicMock
     ) -> None:
         mock_getenv.return_value = "test-api-key"
         mock_embedding = [0.1, 0.2, 0.3]
-        mock_create.return_value.data = [MagicMock(embedding=mock_embedding)]
+        mock_client = MagicMock()
+        mock_openai.return_value = mock_client
+        mock_client.embeddings.create.return_value.data = [MagicMock(embedding=mock_embedding)]
 
         service = EmbeddingService()
         service.generate_embedding("  test text  ")
 
-        mock_create.assert_called_once_with(
+        mock_client.embeddings.create.assert_called_once_with(
             model="text-embedding-3-small", input="test text"
         )
 
@@ -87,17 +91,19 @@ class TestEmbeddingService:
 
         assert "Failed to generate embedding" in str(exc_info.value)
 
-    @patch("wodrag.services.embedding_service.openai.embeddings.create")
+    @patch("wodrag.services.embedding_service.OpenAI")
     @patch("wodrag.services.embedding_service.os.getenv")
     def test_generate_batch_embeddings_success(
-        self, mock_getenv: MagicMock, mock_create: MagicMock
+        self, mock_getenv: MagicMock, mock_openai: MagicMock
     ) -> None:
         mock_getenv.return_value = "test-api-key"
         mock_embeddings = [
             MagicMock(embedding=[0.1, 0.2]),
             MagicMock(embedding=[0.3, 0.4]),
         ]
-        mock_create.return_value.data = mock_embeddings
+        mock_client = MagicMock()
+        mock_openai.return_value = mock_client
+        mock_client.embeddings.create.return_value.data = mock_embeddings
 
         service = EmbeddingService()
         texts = ["text 1", "text 2"]
@@ -106,18 +112,20 @@ class TestEmbeddingService:
         assert len(results) == 2
         assert results[0] == [0.1, 0.2]
         assert results[1] == [0.3, 0.4]
-        mock_create.assert_called_once_with(
+        mock_client.embeddings.create.assert_called_once_with(
             model="text-embedding-3-small", input=["text 1", "text 2"]
         )
 
-    @patch("wodrag.services.embedding_service.openai.embeddings.create")
+    @patch("wodrag.services.embedding_service.OpenAI")
     @patch("wodrag.services.embedding_service.os.getenv")
     def test_generate_batch_embeddings_with_empty_texts(
-        self, mock_getenv: MagicMock, mock_create: MagicMock
+        self, mock_getenv: MagicMock, mock_openai: MagicMock
     ) -> None:
         mock_getenv.return_value = "test-api-key"
         mock_embeddings = [MagicMock(embedding=[0.1, 0.2])]
-        mock_create.return_value.data = mock_embeddings
+        mock_client = MagicMock()
+        mock_openai.return_value = mock_client
+        mock_client.embeddings.create.return_value.data = mock_embeddings
 
         service = EmbeddingService()
         texts = ["", "text 2", "  "]
@@ -127,7 +135,7 @@ class TestEmbeddingService:
         assert results[0] == []  # Empty for first text
         assert results[1] == [0.1, 0.2]  # Embedding for second text
         assert results[2] == []  # Empty for third text
-        mock_create.assert_called_once_with(
+        mock_client.embeddings.create.assert_called_once_with(
             model="text-embedding-3-small", input=["text 2"]
         )
 

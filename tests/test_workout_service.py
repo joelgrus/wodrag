@@ -268,13 +268,13 @@ class TestWorkoutService:
                 workout=Workout(id=1, workout="10 pull-ups"), similarity_score=0.9
             )
         ]
-        mock_repository.hybrid_search.return_value = mock_results
+        mock_repository.search_summaries.return_value = mock_results
 
         results = workout_service.search_workouts(query)
 
         mock_embedding_service.generate_embedding.assert_called_once_with(query)
-        mock_repository.hybrid_search.assert_called_once_with(
-            query_embedding=mock_embedding, filters=None, limit=10
+        mock_repository.search_summaries.assert_called_once_with(
+            query_text=query, limit=10
         )
         assert results == mock_results
 
