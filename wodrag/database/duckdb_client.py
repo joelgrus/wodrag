@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator
+from typing import Any
 
 import duckdb
 from dotenv import load_dotenv
