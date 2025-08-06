@@ -97,50 +97,70 @@ class WorkoutRepository:
 
     # Search Methods
 
-    def hybrid_search(
+    def search_summaries(
         self,
-        query_embedding: list[float],
-        filters: WorkoutFilter | None = None,
+        query_text: str,
         limit: int = 10,
-        similarity_threshold: float = 0.7,
     ) -> list[SearchResult]:
+        """
+        Search workouts by semantic similarity on one_sentence_summary field.
+        
+        Args:
+            query_text: Text to search for
+            limit: Maximum number of results
+            
+        Returns:
+            List of search results ordered by similarity
+        """
         try:
-            # Start with base query
+            # 1. Embed the user's query
+            from ..services.embedding_service import EmbeddingService
+            embedding_service = EmbeddingService()
+            query_embedding = embedding_service.generate_embedding(query_text)
+            
+            # 2. Search database ordered by vector similarity
+            embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
+            
+            sql = f"""
+            SELECT *, 1 - (summary_embedding <=> '{embedding_str}') as similarity
+            FROM workouts
+            WHERE summary_embedding IS NOT NULL
+            ORDER BY summary_embedding <=> '{embedding_str}'
+            LIMIT {limit}
+            """
+            
+            # 3. Execute using client-side similarity calculation
+            # Get all workouts with embeddings
             query = self.client.table(self.table_name).select("*")
-
-            # Apply metadata filters
-            if filters:
-                if filters.movements:
-                    query = query.contains("movements", filters.movements)
-                if filters.equipment:
-                    query = query.overlaps("equipment", filters.equipment)
-                if filters.workout_type:
-                    query = query.eq("workout_type", filters.workout_type)
-                if filters.workout_name:
-                    query = query.eq("workout_name", filters.workout_name)
-                if filters.start_date:
-                    query = query.gte("date", filters.start_date.isoformat())
-                if filters.end_date:
-                    query = query.lte("date", filters.end_date.isoformat())
-
-            # Add vector similarity using PostgREST syntax
-            # Note: This requires the workout_embedding column to exist
-            result = query.limit(limit).execute()
-
-            # For now, return results without similarity scoring
-            # TODO: Implement proper vector similarity when embeddings are populated
-            search_results = []
+            query = query.not_.is_("summary_embedding", "null")
+            result = query.execute()
+            
+            # Calculate similarities and sort
+            scored_results = []
             for row in result.data:
                 workout = Workout.from_dict(row)
+                if workout.summary_embedding:
+                    similarity = self._cosine_similarity(query_embedding, workout.summary_embedding)
+                    scored_results.append((workout, similarity))
+            
+            # Sort by similarity
+            scored_results.sort(key=lambda x: x[1], reverse=True)
+            
+            # Convert to SearchResults
+            search_results = []
+            for workout, similarity in scored_results[:limit]:
                 search_results.append(
                     SearchResult(
-                        workout=workout, similarity_score=None, metadata_match=True
+                        workout=workout,
+                        similarity_score=similarity,
+                        metadata_match=True,
                     )
                 )
-
+            
             return search_results
-        except APIError as e:
-            raise RuntimeError(f"Failed to perform hybrid search: {e}") from e
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to search summaries: {e}") from e
 
     def vector_search(
         self,
@@ -149,23 +169,85 @@ class WorkoutRepository:
         similarity_threshold: float = 0.7,
     ) -> list[SearchResult]:
         try:
-            # Simple query for now - vector similarity will be
-            # added when embeddings exist
-            query = self.client.table(self.table_name).select("*")
-            result = query.limit(limit).execute()
+            # Use the match_summaries function for pure vector search
+            result = self.client.rpc(
+                "match_summaries",
+                {
+                    "query_embedding": query_embedding,
+                    "match_threshold": similarity_threshold,
+                    "match_count": limit,
+                }
+            ).execute()
 
             search_results = []
             for row in result.data:
                 workout = Workout.from_dict(row)
+                similarity_score = row.get("similarity", 0.0)
                 search_results.append(
                     SearchResult(
-                        workout=workout, similarity_score=None, metadata_match=True
+                        workout=workout,
+                        similarity_score=similarity_score,
+                        metadata_match=True,
                     )
                 )
 
             return search_results
         except APIError as e:
             raise RuntimeError(f"Failed to perform vector search: {e}") from e
+
+    def _matches_filters(self, workout: Workout, filters: WorkoutFilter | None) -> bool:
+        """Check if a workout matches the provided filters."""
+        if not filters:
+            return True
+
+        if filters.movements and not any(
+            m in workout.movements for m in filters.movements
+        ):
+            return False
+
+        if filters.equipment and not any(
+            e in workout.equipment for e in filters.equipment
+        ):
+            return False
+
+        if filters.workout_type and workout.workout_type != filters.workout_type:
+            return False
+
+        if filters.workout_name and workout.workout_name != filters.workout_name:
+            return False
+
+        if filters.start_date and workout.date and workout.date < filters.start_date:
+            return False
+
+        if filters.end_date and workout.date and workout.date > filters.end_date:
+            return False
+
+        if filters.has_video is not None and workout.has_video != filters.has_video:
+            return False
+
+        if (
+            filters.has_article is not None
+            and workout.has_article != filters.has_article
+        ):
+            return False
+
+        return True
+
+    def _cosine_similarity(self, vec1: list[float], vec2: list[float]) -> float:
+        """Calculate cosine similarity between two vectors."""
+        import math
+
+        if len(vec1) != len(vec2):
+            return 0.0
+
+        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+        magnitude1 = math.sqrt(sum(a * a for a in vec1))
+        magnitude2 = math.sqrt(sum(a * a for a in vec2))
+
+        if magnitude1 == 0.0 or magnitude2 == 0.0:
+            return 0.0
+
+        return dot_product / (magnitude1 * magnitude2)
 
     def filter_workouts(self, filters: WorkoutFilter) -> list[Workout]:
         query = self.client.table(self.table_name).select("*")

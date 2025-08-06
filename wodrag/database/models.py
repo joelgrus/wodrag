@@ -54,6 +54,16 @@ class Workout:
     def from_dict(cls, data: dict[str, Any]) -> Workout:
         if "date" in data and data["date"] is not None:
             data["date"] = date.fromisoformat(data["date"])
+        
+        # Parse string embeddings back to lists
+        if "summary_embedding" in data and isinstance(data["summary_embedding"], str):
+            import json
+            data["summary_embedding"] = json.loads(data["summary_embedding"])
+        
+        if "workout_embedding" in data and isinstance(data["workout_embedding"], str):
+            import json
+            data["workout_embedding"] = json.loads(data["workout_embedding"])
+            
         return cls(**data)
 
 
