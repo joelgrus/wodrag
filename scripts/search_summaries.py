@@ -24,14 +24,24 @@ app = typer.Typer()
 
 @app.command()
 def search(
-    query: str = typer.Argument(..., help="Search query text"),
+    query: str = typer.Argument(..., help='Search query (use quotes for phrases: "pogo stick")'),
     limit: int = typer.Option(10, "--limit", "-l", help="Maximum number of results"),
     threshold: float = typer.Option(0.7, "--threshold", "-t", help="Similarity threshold (0-1)"),
     movements: Optional[str] = typer.Option(None, "--movements", "-m", help="Filter by movements (comma-separated)"),
     equipment: Optional[str] = typer.Option(None, "--equipment", "-e", help="Filter by equipment (comma-separated)"),
     workout_type: Optional[str] = typer.Option(None, "--type", help="Filter by workout type"),
+    hybrid: bool = typer.Option(False, "--hybrid", "-h", help="Use hybrid search (semantic + keyword)"),
+    semantic_weight: float = typer.Option(0.7, "--weight", "-w", help="Semantic weight for hybrid search (0-1)"),
 ) -> None:
-    """Search workouts using semantic similarity on one-sentence summaries."""
+    """
+    Search workouts using semantic similarity on one-sentence summaries.
+    
+    For hybrid search, supports web-style syntax:
+    - "exact phrase" - search for exact phrase
+    - word1 OR word2 - match either term
+    - word1 -word2 - exclude word2
+    - word1 word2 - match both terms
+    """
     
     try:
         # Initialize services
@@ -47,17 +57,27 @@ def search(
         if workout_type:
             filters.workout_type = workout_type
         
-        # Perform semantic search
+        # Perform search
         print(f"🔍 Searching for: '{query}'")
+        if hybrid:
+            print(f"🔄 Using hybrid search (semantic weight: {semantic_weight})")
         if filters.movements or filters.equipment or filters.workout_type:
             print(f"📋 Filters: movements={filters.movements}, equipment={filters.equipment}, type={filters.workout_type}")
-        print(f"⚙️  Similarity threshold: {threshold}")
+        if not hybrid:
+            print(f"⚙️  Similarity threshold: {threshold}")
         print()
         
-        results = repository.search_summaries(
-            query_text=query,
-            limit=limit,
-        )
+        if hybrid:
+            results = repository.hybrid_search(
+                query_text=query,
+                semantic_weight=semantic_weight,
+                limit=limit,
+            )
+        else:
+            results = repository.search_summaries(
+                query_text=query,
+                limit=limit,
+            )
         
         if not results:
             print("❌ No matching workouts found.")

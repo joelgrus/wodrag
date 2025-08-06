@@ -2,30 +2,21 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Thinking Before Coding
+
+DO NOT write code until I ask you to. If I suggest a feature or a refactoring or similar,
+I am asking for thoughts / design / architecture / etc. Do not actually implement or refactor
+until I give you the go-ahead.
+
 ## Project Overview
 
 `wodrag` is a Python project in its initial stages. The project uses Python 3.11+ and has a minimal structure with a single entry point.
 
-## Development Commands
+## Backlog
 
-### Running the Application
-```bash
-python main.py
-```
+This project uses the backlog tool for managing a backlog of tasks.
+Please use the `backlog` command line tool to manage the backlog.
 
-### Setting Up Development Environment
-Since this project requires Python 3.11+, ensure you have the correct Python version:
-```bash
-python3 --version  # Should show 3.11 or higher
-```
-
-Create and activate a virtual environment:
-```bash
-python3 -m venv .venv
-source .venv/bin/activate  # On Linux/Mac
-# or
-.venv\Scripts\activate  # On Windows
-```
 
 ### Installing Dependencies
 Install the project with development dependencies using uv:
@@ -59,18 +50,7 @@ uv run pytest
   - `uv run pytest`
   - `uv run python scripts/download_all.py`
 
-## Project Structure
-
-The project currently has a minimal structure:
-- `main.py` - Entry point with a simple `main()` function
-- `pyproject.toml` - Python project configuration file
-- `.gitignore` - Standard Python gitignore configuration
-
 ## Architecture Notes
-
-This is a simple Python application with:
-- Single entry point through `main.py`
-- Basic project structure suitable for expansion
 
 When adding new features:
 1. Consider organizing code into modules/packages as the project grows

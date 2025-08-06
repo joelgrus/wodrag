@@ -182,6 +182,172 @@ class WorkoutRepository:
             )
         return search_results
 
+    def text_search_workouts(
+        self,
+        query: str,
+        limit: int = 50,
+    ) -> list[SearchResult]:
+        """
+        Full-text search using websearch syntax.
+        
+        Supports:
+        - "phrase search" - exact phrase matching
+        - word1 OR word2 - either term
+        - word1 -word2 - exclude word2
+        - word1 word2 - both terms (implicit AND)
+        
+        Args:
+            query: Search query text with optional quotes, OR, minus
+            limit: Maximum number of results
+            
+        Returns:
+            List of search results ordered by text rank
+        """
+        try:
+            if not query.strip():
+                return []
+                
+            with self._get_pg_connection() as conn:
+                with conn.cursor() as cursor:
+                    sql = """
+                    SELECT *, 
+                           ts_rank_cd(workout_search_vector, query, 1) as rank
+                    FROM workouts, 
+                         websearch_to_tsquery('english', %s) query
+                    WHERE workout_search_vector @@ query
+                    ORDER BY rank DESC
+                    LIMIT %s
+                    """
+                    cursor.execute(sql, (query, limit))
+                    rows = cursor.fetchall()
+                    
+                    # Get column names
+                    columns = [desc[0] for desc in cursor.description] if cursor.description else []
+            
+            # Convert to SearchResults
+            search_results = []
+            for row in rows:
+                row_dict = dict(zip(columns, row))
+                rank_score = row_dict.pop("rank", 0.0)
+                # Remove the query column that comes from the CTE
+                row_dict.pop("query", None)
+                workout = Workout.from_dict(row_dict)
+                search_results.append(
+                    SearchResult(
+                        workout=workout,
+                        similarity_score=rank_score,  # Store rank as similarity for now
+                        metadata_match=True,
+                    )
+                )
+            
+            return search_results
+            
+        except (psycopg2.Error, ValueError) as e:
+            raise RuntimeError(f"Failed to perform text search: {e}") from e
+    
+    def _merge_search_results(
+        self,
+        semantic_results: list[SearchResult],
+        text_results: list[SearchResult],
+        semantic_weight: float
+    ) -> list[SearchResult]:
+        """Merge and rerank results from semantic and text search."""
+        workout_scores: dict[int, dict[str, Any]] = {}
+        
+        # Add semantic scores
+        for result in semantic_results:
+            if result.workout.id:
+                workout_scores[result.workout.id] = {
+                    'workout': result.workout,
+                    'semantic': result.similarity_score or 0.0,
+                    'text': 0.0,
+                    'combined': 0.0
+                }
+        
+        # Add text search scores (normalize rank scores)
+        if text_results:
+            # PostgreSQL ts_rank returns values typically between 0 and 1
+            # but can be higher, so we normalize
+            max_rank = max([r.similarity_score or 0 for r in text_results])
+            if max_rank > 0:
+                for result in text_results:
+                    if result.workout.id:
+                        # Normalize to 0-1 range
+                        normalized_rank = (result.similarity_score or 0) / max_rank
+                        
+                        if result.workout.id in workout_scores:
+                            workout_scores[result.workout.id]['text'] = normalized_rank
+                        else:
+                            workout_scores[result.workout.id] = {
+                                'workout': result.workout,
+                                'semantic': 0.0,
+                                'text': normalized_rank,
+                                'combined': 0.0
+                            }
+        
+        # Calculate combined scores
+        text_weight = 1 - semantic_weight
+        for workout_id, scores in workout_scores.items():
+            scores['combined'] = (
+                semantic_weight * scores['semantic'] + 
+                text_weight * scores['text']
+            )
+        
+        # Sort by combined score and convert back to SearchResults
+        sorted_results = sorted(
+            workout_scores.values(),
+            key=lambda x: x['combined'],
+            reverse=True
+        )
+        
+        return [
+            SearchResult(
+                workout=item['workout'],
+                similarity_score=item['combined'],
+                metadata_match=True
+            )
+            for item in sorted_results
+        ]
+    
+    def hybrid_search(
+        self,
+        query_text: str,
+        semantic_weight: float = 0.7,
+        limit: int = 10,
+    ) -> list[SearchResult]:
+        """
+        Hybrid search combining semantic similarity and full-text search.
+        
+        Args:
+            query_text: Text to search for
+            semantic_weight: Weight for semantic scores (0-1), text weight = 1 - semantic_weight
+            limit: Maximum number of results
+            
+        Returns:
+            List of search results ordered by combined score
+        """
+        try:
+            # Get larger result sets for merging
+            semantic_limit = min(limit * 5, 50)  # Get more results for better merging
+            text_limit = min(limit * 5, 50)
+            
+            # Perform both searches
+            semantic_results = self.search_summaries(query_text, limit=semantic_limit)
+            text_results = self.text_search_workouts(query_text, limit=text_limit)
+            
+            # Merge and rerank
+            merged_results = self._merge_search_results(
+                semantic_results,
+                text_results,
+                semantic_weight
+            )
+            
+            # Return top N results
+            return merged_results[:limit]
+            
+        except (psycopg2.Error, ValueError) as e:
+            raise RuntimeError(f"Failed to perform hybrid search: {e}") from e
+
     def search_summaries(
         self,
         query_text: str,
