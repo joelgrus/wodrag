@@ -1,9 +1,10 @@
-import pytest
 from datetime import date
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
+
+import pytest
 from postgrest.exceptions import APIError
 
-from wodrag.database.models import Workout, WorkoutFilter, SearchResult
+from wodrag.database.models import Workout, WorkoutFilter
 from wodrag.database.workout_repository import WorkoutRepository
 
 
@@ -44,20 +45,22 @@ class TestWorkoutRepositoryCRUD:
             workout="3 rounds for time: 10 pull-ups",
             scaling="Scale to ring rows",
             movements=["pull up"],
-            equipment=["pull up bar"]
+            equipment=["pull up bar"],
         )
-        
-        mock_client.execute.return_value.data = [{
-            "id": 1,
-            "date": "2024-01-01",
-            "workout": "3 rounds for time: 10 pull-ups",
-            "scaling": "Scale to ring rows",
-            "movements": ["pull up"],
-            "equipment": ["pull up bar"]
-        }]
-        
+
+        mock_client.execute.return_value.data = [
+            {
+                "id": 1,
+                "date": "2024-01-01",
+                "workout": "3 rounds for time: 10 pull-ups",
+                "scaling": "Scale to ring rows",
+                "movements": ["pull up"],
+                "equipment": ["pull up bar"],
+            }
+        ]
+
         result = repository.insert_workout(workout)
-        
+
         assert mock_client.insert.called
         assert result.id == 1
         assert result.movements == ["pull up"]
@@ -67,10 +70,10 @@ class TestWorkoutRepositoryCRUD:
     ) -> None:
         workout = Workout(workout="Test")
         mock_client.execute.side_effect = APIError({"message": "Insert failed"})
-        
+
         with pytest.raises(RuntimeError) as exc_info:
             repository.insert_workout(workout)
-        
+
         assert "Failed to insert workout" in str(exc_info.value)
 
     def test_get_workout_found(
@@ -79,11 +82,11 @@ class TestWorkoutRepositoryCRUD:
         mock_client.execute.return_value.data = {
             "id": 1,
             "workout": "Test workout",
-            "movements": ["pull up"]
+            "movements": ["pull up"],
         }
-        
+
         result = repository.get_workout(1)
-        
+
         assert result is not None
         assert result.id == 1
         assert result.workout == "Test workout"
@@ -93,31 +96,33 @@ class TestWorkoutRepositoryCRUD:
         self, repository: WorkoutRepository, mock_client: MagicMock
     ) -> None:
         mock_client.execute.side_effect = APIError({"message": "Not found"})
-        
+
         result = repository.get_workout(999)
-        
+
         assert result is None
 
     def test_update_workout_metadata(
         self, repository: WorkoutRepository, mock_client: MagicMock
     ) -> None:
-        mock_client.execute.return_value.data = [{
-            "id": 1,
-            "workout": "Test",
-            "movements": ["pull up", "push up"],
-            "equipment": ["none"],
-            "workout_type": "metcon",
-            "workout_name": "Test WOD"
-        }]
-        
+        mock_client.execute.return_value.data = [
+            {
+                "id": 1,
+                "workout": "Test",
+                "movements": ["pull up", "push up"],
+                "equipment": ["none"],
+                "workout_type": "metcon",
+                "workout_name": "Test WOD",
+            }
+        ]
+
         result = repository.update_workout_metadata(
             workout_id=1,
             movements=["pull up", "push up"],
             equipment=["none"],
             workout_type="metcon",
-            workout_name="Test WOD"
+            workout_name="Test WOD",
         )
-        
+
         assert result is not None
         assert result.movements == ["pull up", "push up"]
         assert result.workout_type == "metcon"
@@ -127,11 +132,11 @@ class TestWorkoutRepositoryCRUD:
     ) -> None:
         # Mock get_workout return
         mock_client.execute.return_value.data = {"id": 1, "workout": "Test"}
-        
-        with patch.object(repository, 'get_workout') as mock_get:
+
+        with patch.object(repository, "get_workout") as mock_get:
             mock_get.return_value = Workout(id=1, workout="Test")
             result = repository.update_workout_metadata(workout_id=1)
-            
+
             mock_get.assert_called_once_with(1)
             assert result is not None
             assert result.id == 1
@@ -140,9 +145,9 @@ class TestWorkoutRepositoryCRUD:
         self, repository: WorkoutRepository, mock_client: MagicMock
     ) -> None:
         mock_client.execute.return_value = MagicMock()
-        
+
         result = repository.delete_workout(1)
-        
+
         assert result is True
         mock_client.delete.assert_called_once()
 
@@ -150,37 +155,32 @@ class TestWorkoutRepositoryCRUD:
         self, repository: WorkoutRepository, mock_client: MagicMock
     ) -> None:
         mock_client.execute.side_effect = APIError({"message": "Delete failed"})
-        
+
         result = repository.delete_workout(1)
-        
+
         assert result is False
 
 
 class TestWorkoutRepositorySearch:
-
     def test_hybrid_search(
         self, repository: WorkoutRepository, mock_client: MagicMock
     ) -> None:
         query_embedding = [0.1, 0.2, 0.3]
         filters = WorkoutFilter(
-            movements=["pull up"],
-            equipment=["barbell"],
-            workout_type="metcon"
+            movements=["pull up"], equipment=["barbell"], workout_type="metcon"
         )
-        
-        mock_client.execute.return_value.data = [{
-            "id": 1,
-            "workout": "Test",
-            "movements": ["pull up"]
-        }]
-        
+
+        mock_client.execute.return_value.data = [
+            {"id": 1, "workout": "Test", "movements": ["pull up"]}
+        ]
+
         results = repository.hybrid_search(query_embedding, filters, limit=5)
-        
+
         # Check filters were applied
         mock_client.contains.assert_called_with("movements", ["pull up"])
         mock_client.overlaps.assert_called_with("equipment", ["barbell"])
         mock_client.eq.assert_called_with("workout_type", "metcon")
-        
+
         assert len(results) == 1
         assert results[0].similarity_score is None  # No vector similarity yet
         assert results[0].metadata_match is True
@@ -189,16 +189,13 @@ class TestWorkoutRepositorySearch:
         self, repository: WorkoutRepository, mock_client: MagicMock
     ) -> None:
         query_embedding = [0.1, 0.2, 0.3]
-        
-        mock_client.execute.return_value.data = [{
-            "id": 1,
-            "workout": "Test"
-        }]
-        
+
+        mock_client.execute.return_value.data = [{"id": 1, "workout": "Test"}]
+
         results = repository.vector_search(query_embedding, limit=3)
-        
+
         mock_client.limit.assert_called_with(3)
-        
+
         assert len(results) == 1
         assert results[0].similarity_score is None  # No vector similarity yet
         assert results[0].metadata_match is True
@@ -214,18 +211,20 @@ class TestWorkoutRepositorySearch:
             start_date=date(2024, 1, 1),
             end_date=date(2024, 12, 31),
             has_video=True,
-            has_article=False
+            has_article=False,
         )
-        
-        mock_client.execute.return_value.data = [{
-            "id": 1,
-            "workout": "Back squat 5-5-5-5-5",
-            "workout_type": "strength",
-            "movements": ["back squat"]
-        }]
-        
+
+        mock_client.execute.return_value.data = [
+            {
+                "id": 1,
+                "workout": "Back squat 5-5-5-5-5",
+                "workout_type": "strength",
+                "movements": ["back squat"],
+            }
+        ]
+
         results = repository.filter_workouts(filters)
-        
+
         # Verify all filter methods were called
         mock_client.contains.assert_called_with("movements", ["pull up"])
         mock_client.overlaps.assert_called_with("equipment", ["barbell", "dumbbell"])
@@ -233,7 +232,7 @@ class TestWorkoutRepositorySearch:
         mock_client.eq.assert_any_call("workout_name", "Back Squat")
         mock_client.gte.assert_called_with("date", "2024-01-01")
         mock_client.lte.assert_called_with("date", "2024-12-31")
-        
+
         assert len(results) == 1
         assert results[0].workout_type == "strength"
 
@@ -244,16 +243,16 @@ class TestWorkoutRepositoryListing:
     ) -> None:
         mock_client.execute.return_value.data = [
             {"id": 1, "workout": "Test 1"},
-            {"id": 2, "workout": "Test 2"}
+            {"id": 2, "workout": "Test 2"},
         ]
         mock_client.execute.return_value.count = 50
-        
+
         workouts, total = repository.list_workouts(page=2, page_size=10)
-        
+
         mock_client.limit.assert_called_with(10)
         mock_client.offset.assert_called_with(10)  # (page-1) * page_size
         mock_client.order.assert_called_with("date", desc=True)
-        
+
         assert len(workouts) == 2
         assert total == 50
 
@@ -262,16 +261,16 @@ class TestWorkoutRepositoryListing:
     ) -> None:
         start = date(2024, 1, 1)
         end = date(2024, 1, 31)
-        
+
         mock_client.execute.return_value.data = [
             {"id": 1, "date": "2024-01-15", "workout": "Test"}
         ]
-        
-        with patch.object(repository, 'filter_workouts') as mock_filter:
+
+        with patch.object(repository, "filter_workouts") as mock_filter:
             mock_filter.return_value = [Workout(id=1, date=date(2024, 1, 15))]
-            
-            results = repository.get_workouts_by_date_range(start, end)
-            
+
+            repository.get_workouts_by_date_range(start, end)
+
             # Verify filter was called with correct date range
             call_args = mock_filter.call_args[0][0]
             assert call_args.start_date == start
@@ -281,13 +280,13 @@ class TestWorkoutRepositoryListing:
         self, repository: WorkoutRepository, mock_client: MagicMock
     ) -> None:
         # Mock filter_workouts to return some workouts
-        with patch.object(repository, 'filter_workouts') as mock_filter:
+        with patch.object(repository, "filter_workouts") as mock_filter:
             mock_filter.return_value = [
                 Workout(id=i, workout=f"Workout {i}") for i in range(1, 11)
             ]
-            
+
             results = repository.get_random_workouts(count=3)
-            
+
             assert len(results) == 3
             # Verify results are from the mocked list
             assert all(w.id in range(1, 11) for w in results)
@@ -298,15 +297,15 @@ class TestWorkoutRepositoryAnalytics:
         self, repository: WorkoutRepository, mock_client: MagicMock
     ) -> None:
         # Mock filter_workouts
-        with patch.object(repository, 'filter_workouts') as mock_filter:
+        with patch.object(repository, "filter_workouts") as mock_filter:
             mock_filter.return_value = [
                 Workout(movements=["pull up", "push up"]),
                 Workout(movements=["pull up", "squat"]),
-                Workout(movements=["squat"])
+                Workout(movements=["squat"]),
             ]
-            
+
             counts = repository.get_movement_counts()
-            
+
             assert counts["pull up"] == 2
             assert counts["push up"] == 1
             assert counts["squat"] == 2
@@ -315,15 +314,15 @@ class TestWorkoutRepositoryAnalytics:
         self, repository: WorkoutRepository, mock_client: MagicMock
     ) -> None:
         # Mock filter_workouts
-        with patch.object(repository, 'filter_workouts') as mock_filter:
+        with patch.object(repository, "filter_workouts") as mock_filter:
             mock_filter.return_value = [
                 Workout(equipment=["barbell", "plates"]),
                 Workout(equipment=["barbell"]),
-                Workout(equipment=["dumbbell", "pull up bar"])
+                Workout(equipment=["dumbbell", "pull up bar"]),
             ]
-            
+
             usage = repository.get_equipment_usage()
-            
+
             assert usage["barbell"] == 2
             assert usage["plates"] == 1
             assert usage["dumbbell"] == 1

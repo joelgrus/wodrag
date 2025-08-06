@@ -12,11 +12,7 @@ from wodrag.data_processing.downloader import download_all
 
 def main() -> None:
     """Run the download process."""
-    print("Starting CrossFit workout download...")
-    print("This will download ~290 HTML files from crossfit.com")
-    print("Files will be saved to data/raw/")
-    print()
-    
+
     # You can customize these parameters if needed
     download_all(
         output_dir=Path("data/raw"),

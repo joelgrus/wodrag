@@ -40,7 +40,9 @@ class EmbeddingService:
             raise ValueError("Text cannot be empty")
 
         try:
-            response = self.client.embeddings.create(model=self.model, input=text.strip())
+            response = self.client.embeddings.create(
+                model=self.model, input=text.strip()
+            )
             return response.data[0].embedding
         except (openai.OpenAIError, ValueError) as e:
             raise RuntimeError(f"Failed to generate embedding: {e}") from e
@@ -74,7 +76,9 @@ class EmbeddingService:
             raise ValueError("All texts are empty")
 
         try:
-            response = self.client.embeddings.create(model=self.model, input=non_empty_texts)
+            response = self.client.embeddings.create(
+                model=self.model, input=non_empty_texts
+            )
 
             # Create result list with same length as input
             embeddings: list[list[float]] = [[] for _ in texts]

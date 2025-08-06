@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import os
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import date
-from typing import Any, Generator
+from typing import Any
 
 import psycopg2
 
@@ -14,12 +14,13 @@ from .models import SearchResult, Workout, WorkoutFilter
 class WorkoutRepository:
     """Repository for workout database operations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.table_name = "workouts"
 
-    
     @contextmanager
-    def _get_pg_connection(self) -> Generator[psycopg2.extensions.connection, None, None]:
+    def _get_pg_connection(
+        self,
+    ) -> Generator[psycopg2.extensions.connection, None, None]:
         """Get a direct PostgreSQL connection with proper cleanup."""
         with get_postgres_connection() as conn:
             yield conn
@@ -29,20 +30,27 @@ class WorkoutRepository:
     def insert_workout(self, workout: Workout) -> Workout:
         """Insert a workout into the database using PostgreSQL."""
         # TODO: Implement PostgreSQL-based insert if needed
-        raise NotImplementedError("Use direct SQL or import scripts for PostgreSQL inserts")
+        raise NotImplementedError(
+            "Use direct SQL or import scripts for PostgreSQL inserts"
+        )
 
     def get_workout(self, workout_id: int) -> Workout | None:
         """Get a single workout by ID using PostgreSQL."""
         try:
-            with self._get_pg_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("SELECT * FROM workouts WHERE id = %s", (workout_id,))
-                    row = cursor.fetchone()
-                    if row:
-                        columns = [desc[0] for desc in cursor.description] if cursor.description else []
-                        row_dict = dict(zip(columns, row))
-                        return Workout.from_dict(row_dict)
-                    return None
+            with self._get_pg_connection() as conn, conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT * FROM workouts WHERE id = %s", (workout_id,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    columns = (
+                        [desc[0] for desc in cursor.description]
+                        if cursor.description
+                        else []
+                    )
+                    row_dict = dict(zip(columns, row, strict=False))
+                    return Workout.from_dict(row_dict)
+                return None
         except psycopg2.Error:
             return None
 
@@ -79,11 +87,10 @@ class WorkoutRepository:
     def delete_workout(self, workout_id: int) -> bool:
         """Delete a workout using PostgreSQL."""
         try:
-            with self._get_pg_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("DELETE FROM workouts WHERE id = %s", (workout_id,))
-                    conn.commit()
-                    return cursor.rowcount > 0
+            with self._get_pg_connection() as conn, conn.cursor() as cursor:
+                cursor.execute("DELETE FROM workouts WHERE id = %s", (workout_id,))
+                conn.commit()
+                return cursor.rowcount > 0
         except psycopg2.Error:
             return False
 
@@ -92,48 +99,63 @@ class WorkoutRepository:
     def _generate_query_embedding(self, query_text: str) -> list[float]:
         """Generate embedding for search query."""
         from ..services.embedding_service import EmbeddingService
+
         embedding_service = EmbeddingService()
         return embedding_service.generate_embedding(query_text)
-    
+
     def _execute_vector_similarity_query(
-        self, 
-        query_embedding: list[float], 
+        self,
+        query_embedding: list[float],
         limit: int,
-        similarity_threshold: float | None = None
+        similarity_threshold: float | None = None,
     ) -> list[tuple[Any, ...]]:
         """Execute vector similarity SQL query."""
-        with self._get_pg_connection() as conn:
-            with conn.cursor() as cursor:
-                if similarity_threshold is not None:
-                    sql = """
-                    SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
-                    FROM workouts 
-                    WHERE summary_embedding IS NOT NULL 
+        with self._get_pg_connection() as conn, conn.cursor() as cursor:
+            if similarity_threshold is not None:
+                sql = """
+                    SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity
+                    FROM workouts
+                    WHERE summary_embedding IS NOT NULL
                     AND 1 - (summary_embedding <=> %s::vector) >= %s
-                    ORDER BY summary_embedding <=> %s::vector 
+                    ORDER BY summary_embedding <=> %s::vector
                     LIMIT %s
                     """
-                    cursor.execute(sql, (query_embedding, query_embedding, similarity_threshold, query_embedding, limit))
-                else:
-                    sql = """
-                    SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
-                    FROM workouts 
-                    WHERE summary_embedding IS NOT NULL 
-                    ORDER BY summary_embedding <=> %s::vector 
+                cursor.execute(
+                    sql,
+                    (
+                        query_embedding,
+                        query_embedding,
+                        similarity_threshold,
+                        query_embedding,
+                        limit,
+                    ),
+                )
+            else:
+                sql = """
+                    SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity
+                    FROM workouts
+                    WHERE summary_embedding IS NOT NULL
+                    ORDER BY summary_embedding <=> %s::vector
                     LIMIT %s
                     """
-                    cursor.execute(sql, (query_embedding, query_embedding, limit))
-                
-                rows = cursor.fetchall()
-                columns = [desc[0] for desc in cursor.description] if cursor.description else []
-                return [(row, columns) for row in rows]
-    
-    def _convert_rows_to_search_results(self, rows_with_columns: list[tuple[Any, ...]]) -> list[SearchResult]:
+                cursor.execute(sql, (query_embedding, query_embedding, limit))
+
+            rows = cursor.fetchall()
+            columns = (
+                [desc[0] for desc in cursor.description]
+                if cursor.description
+                else []
+            )
+            return [(row, columns) for row in rows]
+
+    def _convert_rows_to_search_results(
+        self, rows_with_columns: list[tuple[Any, ...]]
+    ) -> list[SearchResult]:
         """Convert database rows to SearchResult objects."""
         search_results = []
         for row_data in rows_with_columns:
             row, columns = row_data
-            row_dict = dict(zip(columns, row))
+            row_dict = dict(zip(columns, row, strict=False))
             similarity_score = row_dict.pop("similarity", 0.0)
             workout = Workout.from_dict(row_dict)
             search_results.append(
@@ -152,29 +174,28 @@ class WorkoutRepository:
     ) -> list[SearchResult]:
         """
         Full-text search using ParadeDB BM25 ranking.
-        
+
         Supports:
         - "phrase search" - exact phrase matching
         - word1 OR word2 - either term
         - word1 AND word2 - both terms
         - word1 NOT word2 - exclude word2
         - Complex boolean queries
-        
+
         Args:
-            query: Search query text 
+            query: Search query text
             limit: Maximum number of results
-            
+
         Returns:
             List of search results ordered by BM25 score
         """
         try:
             if not query.strip():
                 return []
-                
-            with self._get_pg_connection() as conn:
-                with conn.cursor() as cursor:
-                    # Use ParadeDB's BM25 search with boolean query
-                    sql = """
+
+            with self._get_pg_connection() as conn, conn.cursor() as cursor:
+                # Use ParadeDB's BM25 search with boolean query
+                sql = """
                     SELECT w.*, paradedb.score(w.id) as bm25_score
                     FROM workouts w
                     WHERE w @@@ paradedb.boolean(
@@ -188,16 +209,20 @@ class WorkoutRepository:
                     ORDER BY bm25_score DESC
                     LIMIT %s
                     """
-                    cursor.execute(sql, (query, query, query, query, limit))
-                    rows = cursor.fetchall()
-                    
-                    # Get column names
-                    columns = [desc[0] for desc in cursor.description] if cursor.description else []
-            
+                cursor.execute(sql, (query, query, query, query, limit))
+                rows = cursor.fetchall()
+
+                # Get column names
+                columns = (
+                    [desc[0] for desc in cursor.description]
+                    if cursor.description
+                    else []
+                )
+
             # Convert to SearchResults
             search_results = []
             for row in rows:
-                row_dict = dict(zip(columns, row))
+                row_dict = dict(zip(columns, row, strict=False))
                 bm25_score = row_dict.pop("bm25_score", 0.0)
                 workout = Workout.from_dict(row_dict)
                 search_results.append(
@@ -207,32 +232,31 @@ class WorkoutRepository:
                         metadata_match=True,
                     )
                 )
-            
+
             return search_results
-            
+
         except (psycopg2.Error, ValueError) as e:
             raise RuntimeError(f"Failed to perform BM25 search: {e}") from e
-    
-    
+
     def _merge_search_results(
         self,
         semantic_results: list[SearchResult],
         text_results: list[SearchResult],
-        semantic_weight: float
+        semantic_weight: float,
     ) -> list[SearchResult]:
         """Merge and rerank results from semantic and text search."""
         workout_scores: dict[int, dict[str, Any]] = {}
-        
+
         # Add semantic scores
         for result in semantic_results:
             if result.workout.id:
                 workout_scores[result.workout.id] = {
-                    'workout': result.workout,
-                    'semantic': result.similarity_score or 0.0,
-                    'text': 0.0,
-                    'combined': 0.0
+                    "workout": result.workout,
+                    "semantic": result.similarity_score or 0.0,
+                    "text": 0.0,
+                    "combined": 0.0,
                 }
-        
+
         # Add text search scores (normalize rank scores)
         if text_results:
             # PostgreSQL ts_rank returns values typically between 0 and 1
@@ -243,41 +267,38 @@ class WorkoutRepository:
                     if result.workout.id:
                         # Normalize to 0-1 range
                         normalized_rank = (result.similarity_score or 0) / max_rank
-                        
+
                         if result.workout.id in workout_scores:
-                            workout_scores[result.workout.id]['text'] = normalized_rank
+                            workout_scores[result.workout.id]["text"] = normalized_rank
                         else:
                             workout_scores[result.workout.id] = {
-                                'workout': result.workout,
-                                'semantic': 0.0,
-                                'text': normalized_rank,
-                                'combined': 0.0
+                                "workout": result.workout,
+                                "semantic": 0.0,
+                                "text": normalized_rank,
+                                "combined": 0.0,
                             }
-        
+
         # Calculate combined scores
         text_weight = 1 - semantic_weight
-        for workout_id, scores in workout_scores.items():
-            scores['combined'] = (
-                semantic_weight * scores['semantic'] + 
-                text_weight * scores['text']
+        for _workout_id, scores in workout_scores.items():
+            scores["combined"] = (
+                semantic_weight * scores["semantic"] + text_weight * scores["text"]
             )
-        
+
         # Sort by combined score and convert back to SearchResults
         sorted_results = sorted(
-            workout_scores.values(),
-            key=lambda x: x['combined'],
-            reverse=True
+            workout_scores.values(), key=lambda x: x["combined"], reverse=True
         )
-        
+
         return [
             SearchResult(
-                workout=item['workout'],
-                similarity_score=item['combined'],
-                metadata_match=True
+                workout=item["workout"],
+                similarity_score=item["combined"],
+                metadata_match=True,
             )
             for item in sorted_results
         ]
-    
+
     def hybrid_search(
         self,
         query_text: str,
@@ -286,12 +307,12 @@ class WorkoutRepository:
     ) -> list[SearchResult]:
         """
         Hybrid search combining semantic similarity and full-text search.
-        
+
         Args:
             query_text: Text to search for
-            semantic_weight: Weight for semantic scores (0-1), text weight = 1 - semantic_weight
+            semantic_weight: Weight for semantic scores (0-1)
             limit: Maximum number of results
-            
+
         Returns:
             List of search results ordered by combined score
         """
@@ -299,21 +320,19 @@ class WorkoutRepository:
             # Get larger result sets for merging
             semantic_limit = min(limit * 5, 50)  # Get more results for better merging
             text_limit = min(limit * 5, 50)
-            
+
             # Perform both searches
             semantic_results = self.search_summaries(query_text, limit=semantic_limit)
             text_results = self.text_search_workouts(query_text, limit=text_limit)
-            
+
             # Merge and rerank
             merged_results = self._merge_search_results(
-                semantic_results,
-                text_results,
-                semantic_weight
+                semantic_results, text_results, semantic_weight
             )
-            
+
             # Return top N results
             return merged_results[:limit]
-            
+
         except (psycopg2.Error, ValueError) as e:
             raise RuntimeError(f"Failed to perform hybrid search: {e}") from e
 
@@ -324,17 +343,19 @@ class WorkoutRepository:
     ) -> list[SearchResult]:
         """
         Search workouts by semantic similarity on one_sentence_summary field.
-        
+
         Args:
             query_text: Text to search for
             limit: Maximum number of results
-            
+
         Returns:
             List of search results ordered by similarity
         """
         try:
             query_embedding = self._generate_query_embedding(query_text)
-            rows_with_columns = self._execute_vector_similarity_query(query_embedding, limit)
+            rows_with_columns = self._execute_vector_similarity_query(
+                query_embedding, limit
+            )
             return self._convert_rows_to_search_results(rows_with_columns)
         except (psycopg2.Error, ValueError) as e:
             raise RuntimeError(f"Failed to search summaries: {e}") from e
@@ -347,25 +368,37 @@ class WorkoutRepository:
     ) -> list[SearchResult]:
         try:
             # Execute raw SQL with vector similarity using psycopg2
-            with self._get_pg_connection() as conn:
-                with conn.cursor() as cursor:
-                    sql = """
-                    SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
-                    FROM workouts 
-                    WHERE summary_embedding IS NOT NULL 
+            with self._get_pg_connection() as conn, conn.cursor() as cursor:
+                sql = """
+                    SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity
+                    FROM workouts
+                    WHERE summary_embedding IS NOT NULL
                     AND 1 - (summary_embedding <=> %s::vector) >= %s
-                    ORDER BY summary_embedding <=> %s::vector 
+                    ORDER BY summary_embedding <=> %s::vector
                     LIMIT %s
                     """
-                    cursor.execute(sql, (query_embedding, query_embedding, similarity_threshold, query_embedding, limit))
-                    rows = cursor.fetchall()
-                    
-                    # Get column names
-                    columns = [desc[0] for desc in cursor.description] if cursor.description else []
+                cursor.execute(
+                    sql,
+                    (
+                        query_embedding,
+                        query_embedding,
+                        similarity_threshold,
+                        query_embedding,
+                        limit,
+                    ),
+                )
+                rows = cursor.fetchall()
+
+                # Get column names
+                columns = (
+                    [desc[0] for desc in cursor.description]
+                    if cursor.description
+                    else []
+                )
 
             search_results = []
             for row in rows:
-                row_dict = dict(zip(columns, row))
+                row_dict = dict(zip(columns, row, strict=False))
                 workout = Workout.from_dict(row_dict)
                 similarity_score = row_dict.get("similarity", 0.0)
                 search_results.append(
@@ -410,13 +443,10 @@ class WorkoutRepository:
         if filters.has_video is not None and workout.has_video != filters.has_video:
             return False
 
-        if (
+        return not (
             filters.has_article is not None
             and workout.has_article != filters.has_article
-        ):
-            return False
-
-        return True
+        )
 
     def _cosine_similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """Calculate cosine similarity between two vectors."""
@@ -425,7 +455,7 @@ class WorkoutRepository:
         if len(vec1) != len(vec2):
             return 0.0
 
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+        dot_product = sum(a * b for a, b in zip(vec1, vec2, strict=False))
         magnitude1 = math.sqrt(sum(a * a for a in vec1))
         magnitude2 = math.sqrt(sum(a * a for a in vec2))
 
@@ -472,35 +502,33 @@ class WorkoutRepository:
     def get_movement_counts(self) -> dict[str, int]:
         """Get movement usage statistics using database aggregation."""
         try:
-            with self._get_pg_connection() as conn:
-                with conn.cursor() as cursor:
-                    sql = """
+            with self._get_pg_connection() as conn, conn.cursor() as cursor:
+                sql = """
                     SELECT movement, COUNT(*) as count
                     FROM workouts, unnest(movements) as movement
                     WHERE movements IS NOT NULL
                     GROUP BY movement
                     ORDER BY count DESC
                     """
-                    cursor.execute(sql)
-                    rows = cursor.fetchall()
-                    return {row[0]: row[1] for row in rows}
+                cursor.execute(sql)
+                rows = cursor.fetchall()
+                return {row[0]: row[1] for row in rows}
         except (psycopg2.Error, ValueError) as e:
             raise RuntimeError(f"Failed to get movement counts: {e}") from e
 
     def get_equipment_usage(self) -> dict[str, int]:
         """Get equipment usage statistics using database aggregation."""
         try:
-            with self._get_pg_connection() as conn:
-                with conn.cursor() as cursor:
-                    sql = """
+            with self._get_pg_connection() as conn, conn.cursor() as cursor:
+                sql = """
                     SELECT equipment_item, COUNT(*) as count
                     FROM workouts, unnest(equipment) as equipment_item
                     WHERE equipment IS NOT NULL
                     GROUP BY equipment_item
                     ORDER BY count DESC
                     """
-                    cursor.execute(sql)
-                    rows = cursor.fetchall()
-                    return {row[0]: row[1] for row in rows}
+                cursor.execute(sql)
+                rows = cursor.fetchall()
+                return {row[0]: row[1] for row in rows}
         except (psycopg2.Error, ValueError) as e:
             raise RuntimeError(f"Failed to get equipment usage: {e}") from e
