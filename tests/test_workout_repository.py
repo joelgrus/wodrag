@@ -8,13 +8,13 @@ from wodrag.database.models import Workout, WorkoutFilter
 from wodrag.database.workout_repository import WorkoutRepository
 
 # Skip all tests in this file since WorkoutRepository now uses PostgreSQL directly
-# and these tests were written for Supabase
-pytestmark = pytest.mark.skip(reason="WorkoutRepository tests need PostgreSQL connection, skipping for now")
+# and these tests were written for Supabase - need to rewrite for PostgreSQL
+pytestmark = pytest.mark.skip(reason="WorkoutRepository tests need rewriting for PostgreSQL, skipping for now")
 
 
 @pytest.fixture
 def mock_client() -> MagicMock:
-    """Create a mock Supabase client."""
+    """Create a mock PostgreSQL client."""
     client = MagicMock()
     # Set up the chain of method calls
     client.table.return_value = client
