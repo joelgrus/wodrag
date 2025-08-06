@@ -126,6 +126,62 @@ class WorkoutRepository:
 
     # Search Methods
 
+    def _generate_query_embedding(self, query_text: str) -> list[float]:
+        """Generate embedding for search query."""
+        from ..services.embedding_service import EmbeddingService
+        embedding_service = EmbeddingService()
+        return embedding_service.generate_embedding(query_text)
+    
+    def _execute_vector_similarity_query(
+        self, 
+        query_embedding: list[float], 
+        limit: int,
+        similarity_threshold: float | None = None
+    ) -> list[tuple[Any, ...]]:
+        """Execute vector similarity SQL query."""
+        with self._get_pg_connection() as conn:
+            with conn.cursor() as cursor:
+                if similarity_threshold is not None:
+                    sql = """
+                    SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
+                    FROM workouts 
+                    WHERE summary_embedding IS NOT NULL 
+                    AND 1 - (summary_embedding <=> %s::vector) >= %s
+                    ORDER BY summary_embedding <=> %s::vector 
+                    LIMIT %s
+                    """
+                    cursor.execute(sql, (query_embedding, query_embedding, similarity_threshold, query_embedding, limit))
+                else:
+                    sql = """
+                    SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
+                    FROM workouts 
+                    WHERE summary_embedding IS NOT NULL 
+                    ORDER BY summary_embedding <=> %s::vector 
+                    LIMIT %s
+                    """
+                    cursor.execute(sql, (query_embedding, query_embedding, limit))
+                
+                rows = cursor.fetchall()
+                columns = [desc[0] for desc in cursor.description] if cursor.description else []
+                return [(row, columns) for row in rows]
+    
+    def _convert_rows_to_search_results(self, rows_with_columns: list[tuple[Any, ...]]) -> list[SearchResult]:
+        """Convert database rows to SearchResult objects."""
+        search_results = []
+        for row_data in rows_with_columns:
+            row, columns = row_data
+            row_dict = dict(zip(columns, row))
+            similarity_score = row_dict.pop("similarity", 0.0)
+            workout = Workout.from_dict(row_dict)
+            search_results.append(
+                SearchResult(
+                    workout=workout,
+                    similarity_score=similarity_score,
+                    metadata_match=True,
+                )
+            )
+        return search_results
+
     def search_summaries(
         self,
         query_text: str,
@@ -142,43 +198,9 @@ class WorkoutRepository:
             List of search results ordered by similarity
         """
         try:
-            # 1. Embed the user's query
-            from ..services.embedding_service import EmbeddingService
-            embedding_service = EmbeddingService()
-            query_embedding = embedding_service.generate_embedding(query_text)
-            
-            # 2. Execute raw SQL with vector similarity using psycopg2
-            with self._get_pg_connection() as conn:
-                with conn.cursor() as cursor:
-                    sql = """
-                    SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
-                    FROM workouts 
-                    WHERE summary_embedding IS NOT NULL 
-                    ORDER BY summary_embedding <=> %s::vector 
-                    LIMIT %s
-                    """
-                    cursor.execute(sql, (query_embedding, query_embedding, limit))
-                    rows = cursor.fetchall()
-                    
-                    # Get column names
-                    columns = [desc[0] for desc in cursor.description] if cursor.description else []
-                
-            # Convert to SearchResults
-            search_results = []
-            for row in rows:
-                row_dict = dict(zip(columns, row))
-                similarity_score = row_dict.pop("similarity", 0.0)
-                workout = Workout.from_dict(row_dict)
-                search_results.append(
-                    SearchResult(
-                        workout=workout,
-                        similarity_score=similarity_score,
-                        metadata_match=True,
-                    )
-                )
-            
-            return search_results
-            
+            query_embedding = self._generate_query_embedding(query_text)
+            rows_with_columns = self._execute_vector_similarity_query(query_embedding, limit)
+            return self._convert_rows_to_search_results(rows_with_columns)
         except (psycopg2.Error, ValueError) as e:
             raise RuntimeError(f"Failed to search summaries: {e}") from e
 
@@ -365,19 +387,37 @@ class WorkoutRepository:
     # Analytics
 
     def get_movement_counts(self) -> dict[str, int]:
-        # Client-side aggregation - simple and reliable
-        all_workouts = self.filter_workouts(WorkoutFilter())
-        movement_counts: dict[str, int] = {}
-        for workout in all_workouts:
-            for movement in workout.movements:
-                movement_counts[movement] = movement_counts.get(movement, 0) + 1
-        return movement_counts
+        """Get movement usage statistics using database aggregation."""
+        try:
+            with self._get_pg_connection() as conn:
+                with conn.cursor() as cursor:
+                    sql = """
+                    SELECT movement, COUNT(*) as count
+                    FROM workouts, unnest(movements) as movement
+                    WHERE movements IS NOT NULL
+                    GROUP BY movement
+                    ORDER BY count DESC
+                    """
+                    cursor.execute(sql)
+                    rows = cursor.fetchall()
+                    return {row[0]: row[1] for row in rows}
+        except (psycopg2.Error, ValueError) as e:
+            raise RuntimeError(f"Failed to get movement counts: {e}") from e
 
     def get_equipment_usage(self) -> dict[str, int]:
-        # Client-side aggregation - simple and reliable
-        all_workouts = self.filter_workouts(WorkoutFilter())
-        equipment_counts: dict[str, int] = {}
-        for workout in all_workouts:
-            for item in workout.equipment:
-                equipment_counts[item] = equipment_counts.get(item, 0) + 1
-        return equipment_counts
+        """Get equipment usage statistics using database aggregation."""
+        try:
+            with self._get_pg_connection() as conn:
+                with conn.cursor() as cursor:
+                    sql = """
+                    SELECT equipment_item, COUNT(*) as count
+                    FROM workouts, unnest(equipment) as equipment_item
+                    WHERE equipment IS NOT NULL
+                    GROUP BY equipment_item
+                    ORDER BY count DESC
+                    """
+                    cursor.execute(sql)
+                    rows = cursor.fetchall()
+                    return {row[0]: row[1] for row in rows}
+        except (psycopg2.Error, ValueError) as e:
+            raise RuntimeError(f"Failed to get equipment usage: {e}") from e
