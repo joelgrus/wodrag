@@ -53,7 +53,9 @@ class Workout:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Workout:
         if "date" in data and data["date"] is not None:
-            data["date"] = date.fromisoformat(data["date"])
+            if isinstance(data["date"], str):
+                data["date"] = date.fromisoformat(data["date"])
+            # If it's already a date object (from psycopg2), leave it as-is
         
         # Parse string embeddings back to lists
         if "summary_embedding" in data and isinstance(data["summary_embedding"], str):

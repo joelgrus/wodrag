@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from datetime import date
 from typing import Any
 
+import psycopg2
 from postgrest.exceptions import APIError
 from supabase import Client
 
@@ -16,6 +18,26 @@ class WorkoutRepository:
     def __init__(self, client: Client | None = None):
         self.client = client or get_supabase_client()
         self.table_name = "workouts"
+        self._pg_conn = None
+
+    def _get_pg_connection(self):
+        """Get a direct PostgreSQL connection for raw SQL queries."""
+        if self._pg_conn is None or self._pg_conn.closed:
+            # Get connection string from environment
+            db_url = os.getenv("DATABASE_URL")
+            if not db_url:
+                # Construct from Supabase environment variables
+                supabase_url = os.getenv("SUPABASE_URL", "")
+                db_password = os.getenv("SUPABASE_DB_PASSWORD") or os.getenv("DB_PASSWORD") or os.getenv("POSTGRES_PASSWORD")
+                
+                if "supabase.co" in supabase_url and db_password:
+                    project_id = supabase_url.split("//")[1].split(".")[0]
+                    db_url = f"postgresql://postgres.{project_id}:{db_password}@aws-0-us-east-2.pooler.supabase.com:5432/postgres"
+                else:
+                    raise RuntimeError("Need DATABASE_URL or SUPABASE_DB_PASSWORD environment variable for direct PostgreSQL access")
+                
+            self._pg_conn = psycopg2.connect(db_url)
+        return self._pg_conn
 
     # CRUD Operations
 
@@ -118,41 +140,32 @@ class WorkoutRepository:
             embedding_service = EmbeddingService()
             query_embedding = embedding_service.generate_embedding(query_text)
             
-            # 2. Search database ordered by vector similarity
-            embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
-            
-            sql = f"""
-            SELECT *, 1 - (summary_embedding <=> '{embedding_str}') as similarity
-            FROM workouts
-            WHERE summary_embedding IS NOT NULL
-            ORDER BY summary_embedding <=> '{embedding_str}'
-            LIMIT {limit}
-            """
-            
-            # 3. Execute using client-side similarity calculation
-            # Get all workouts with embeddings
-            query = self.client.table(self.table_name).select("*")
-            query = query.not_.is_("summary_embedding", "null")
-            result = query.execute()
-            
-            # Calculate similarities and sort
-            scored_results = []
-            for row in result.data:
-                workout = Workout.from_dict(row)
-                if workout.summary_embedding:
-                    similarity = self._cosine_similarity(query_embedding, workout.summary_embedding)
-                    scored_results.append((workout, similarity))
-            
-            # Sort by similarity
-            scored_results.sort(key=lambda x: x[1], reverse=True)
-            
+            # 2. Execute raw SQL with vector similarity using psycopg2
+            conn = self._get_pg_connection()
+            with conn.cursor() as cursor:
+                sql = """
+                SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
+                FROM workouts 
+                WHERE summary_embedding IS NOT NULL 
+                ORDER BY summary_embedding <=> %s::vector 
+                LIMIT %s
+                """
+                cursor.execute(sql, (query_embedding, query_embedding, limit))
+                rows = cursor.fetchall()
+                
+                # Get column names
+                columns = [desc[0] for desc in cursor.description]
+                
             # Convert to SearchResults
             search_results = []
-            for workout, similarity in scored_results[:limit]:
+            for row in rows:
+                row_dict = dict(zip(columns, row))
+                similarity_score = row_dict.pop("similarity", 0.0)
+                workout = Workout.from_dict(row_dict)
                 search_results.append(
                     SearchResult(
                         workout=workout,
-                        similarity_score=similarity,
+                        similarity_score=similarity_score,
                         metadata_match=True,
                     )
                 )
@@ -169,20 +182,28 @@ class WorkoutRepository:
         similarity_threshold: float = 0.7,
     ) -> list[SearchResult]:
         try:
-            # Use the match_summaries function for pure vector search
-            result = self.client.rpc(
-                "match_summaries",
-                {
-                    "query_embedding": query_embedding,
-                    "match_threshold": similarity_threshold,
-                    "match_count": limit,
-                }
-            ).execute()
+            # Execute raw SQL with vector similarity using psycopg2
+            conn = self._get_pg_connection()
+            with conn.cursor() as cursor:
+                sql = """
+                SELECT *, 1 - (summary_embedding <=> %s::vector) as similarity 
+                FROM workouts 
+                WHERE summary_embedding IS NOT NULL 
+                AND 1 - (summary_embedding <=> %s::vector) >= %s
+                ORDER BY summary_embedding <=> %s::vector 
+                LIMIT %s
+                """
+                cursor.execute(sql, (query_embedding, query_embedding, similarity_threshold, query_embedding, limit))
+                rows = cursor.fetchall()
+                
+                # Get column names
+                columns = [desc[0] for desc in cursor.description]
 
             search_results = []
-            for row in result.data:
-                workout = Workout.from_dict(row)
-                similarity_score = row.get("similarity", 0.0)
+            for row in rows:
+                row_dict = dict(zip(columns, row))
+                workout = Workout.from_dict(row_dict)
+                similarity_score = row_dict.get("similarity", 0.0)
                 search_results.append(
                     SearchResult(
                         workout=workout,
@@ -192,7 +213,7 @@ class WorkoutRepository:
                 )
 
             return search_results
-        except APIError as e:
+        except Exception as e:
             raise RuntimeError(f"Failed to perform vector search: {e}") from e
 
     def _matches_filters(self, workout: Workout, filters: WorkoutFilter | None) -> bool:
