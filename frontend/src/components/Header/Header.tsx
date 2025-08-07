@@ -3,12 +3,12 @@ import React from 'react';
 interface HeaderProps {
   isDarkMode: boolean;
   onToggleTheme: () => void;
+  onNewChat: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ isDarkMode, onToggleTheme }) => {
+const Header: React.FC<HeaderProps> = ({ isDarkMode, onToggleTheme, onNewChat }) => {
   const handleNewChat = () => {
-    // TODO: Implement new chat functionality
-    console.log('New chat clicked');
+    onNewChat();
   };
 
   return (

@@ -10,10 +10,16 @@ function App() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
+  const [resetTrigger, setResetTrigger] = useState(0);
+
   const toggleTheme = () => {
     const newTheme = !isDarkMode;
     setIsDarkMode(newTheme);
     localStorage.setItem('theme', newTheme ? 'dark' : 'light');
+  };
+
+  const handleNewChat = () => {
+    setResetTrigger(prev => prev + 1);
   };
 
   return (
@@ -26,8 +32,12 @@ function App() {
         <Header 
           isDarkMode={isDarkMode} 
           onToggleTheme={toggleTheme}
+          onNewChat={handleNewChat}
         />
-        <ChatInterface isDarkMode={isDarkMode} />
+        <ChatInterface 
+          isDarkMode={isDarkMode} 
+          resetTrigger={resetTrigger}
+        />
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ def main() -> None:
     settings = get_settings()
     
     uvicorn.run(
-        "wodrag.api.main:app",
+        "wodrag.api.main_fastapi:app",
         host=settings.host,
         port=settings.port,
         reload=settings.reload,

@@ -1,15 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import LoadingIndicator from './LoadingIndicator';
 import { ChatMessage, ChatState } from '../../types/api';
+import { apiService } from '../../services/api';
 
 interface ChatInterfaceProps {
   isDarkMode: boolean;
+  resetTrigger?: number; // Increment to trigger reset
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ isDarkMode }) => {
-  const [chatState, setChatState] = useState<ChatState>({
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ isDarkMode, resetTrigger }) => {
+  const getInitialState = (): ChatState => ({
     messages: [
       {
         id: '1',
@@ -23,7 +25,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ isDarkMode }) => {
     error: null,
   });
 
-  const handleSendMessage = (message: string) => {
+  const [chatState, setChatState] = useState<ChatState>(getInitialState);
+
+  // Reset chat when resetTrigger changes
+  useEffect(() => {
+    if (resetTrigger && resetTrigger > 0) {
+      setChatState(getInitialState());
+    }
+  }, [resetTrigger]);
+
+  const handleSendMessage = async (message: string) => {
     // Add user message
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -36,24 +47,56 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ isDarkMode }) => {
       ...prev,
       messages: [...prev.messages, userMessage],
       isLoading: true,
+      error: null,
     }));
 
-    // TODO: Implement API call
-    // For now, simulate a response
-    setTimeout(() => {
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'This is a placeholder response. API integration will be implemented in Phase 2.',
-        timestamp: new Date(),
+    try {
+      // Make API call to backend
+      const request: any = {
+        question: message,
+        verbose: false,
       };
+      
+      // Only include conversation_id if we have one
+      if (chatState.conversationId) {
+        request.conversation_id = chatState.conversationId;
+      }
+      
+      const response = await apiService.queryAgent(request);
 
+      if (response.success && response.data) {
+        const data = response.data; // TypeScript now knows data is not null
+        const assistantMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.answer,
+          timestamp: new Date(),
+        };
+
+        setChatState(prev => ({
+          ...prev,
+          messages: [...prev.messages, assistantMessage],
+          isLoading: false,
+          conversationId: data.conversation_id,
+          error: null,
+        }));
+      } else {
+        // API call succeeded but returned an error
+        setChatState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: response.error || 'Failed to get response from AI',
+        }));
+      }
+    } catch (error) {
+      // Network or other errors
+      console.error('Error sending message:', error);
       setChatState(prev => ({
         ...prev,
-        messages: [...prev.messages, assistantMessage],
         isLoading: false,
+        error: 'Network error. Please check your connection and try again.',
       }));
-    }, 1500);
+    }
   };
 
   return (
