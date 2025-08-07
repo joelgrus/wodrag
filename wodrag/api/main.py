@@ -65,7 +65,9 @@ def provide_conversation_config() -> ConversationConfig:
     return ConversationConfig.from_env()
 
 
-def provide_conversation_store(conversation_config: ConversationConfig) -> ConversationStore:
+def provide_conversation_store(
+    conversation_config: ConversationConfig,
+) -> ConversationStore:
     """Provide ConversationStore instance for dependency injection."""
     return InMemoryConversationStore(
         max_conversations=conversation_config.max_conversations,

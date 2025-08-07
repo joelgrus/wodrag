@@ -144,19 +144,3 @@ class InMemoryConversationStore(ConversationStore):
         return datetime.now(UTC) - conversation.last_updated > self.conversation_ttl
 
 
-# For backward compatibility during transition
-def get_conversation_store() -> ConversationStore:
-    """Get a conversation store instance.
-
-    This is a compatibility function that will be removed after full DI migration.
-    """
-    return InMemoryConversationStore()
-
-
-def set_conversation_store(store: ConversationStore) -> None:
-    """Set the global conversation store instance.
-
-    This is a compatibility function that will be removed after full DI migration.
-    """
-    # No-op for now, users should use proper DI instead
-    pass

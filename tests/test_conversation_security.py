@@ -8,7 +8,6 @@ from wodrag.conversation.security import (
     MessageSanitizer,
     SecureIdGenerator,
     RateLimiter,
-    get_rate_limiter,
 )
 
 
@@ -226,18 +225,20 @@ class TestRateLimiter:
         # Should be empty now
         assert len(limiter._requests) == 0
     
-    def test_global_rate_limiter(self):
-        """Test global rate limiter compatibility function."""
-        limiter1 = get_rate_limiter()
-        limiter2 = get_rate_limiter()
+    def test_rate_limiter_configuration(self):
+        """Test rate limiter default configuration."""
+        limiter1 = RateLimiter()
+        limiter2 = RateLimiter(max_requests=100, window_seconds=3600)
         
-        # Both should be RateLimiter instances (but not necessarily the same object)
+        # Both should be RateLimiter instances
         assert isinstance(limiter1, RateLimiter)
         assert isinstance(limiter2, RateLimiter)
         
-        # Should have same configuration
-        assert limiter1.max_requests == limiter2.max_requests
-        assert limiter1.window_seconds == limiter2.window_seconds
+        # Should have expected default configuration
+        assert limiter1.max_requests == 100
+        assert limiter1.window_seconds == 3600
+        assert limiter2.max_requests == 100
+        assert limiter2.window_seconds == 3600
 
 
 class TestSecurityIntegration:

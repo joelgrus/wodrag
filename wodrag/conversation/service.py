@@ -10,18 +10,16 @@ class ConversationService:
     """Service for managing conversations and their context."""
 
     def __init__(
-        self, store: ConversationStore, rate_limiter: RateLimiter | None = None
+        self, store: ConversationStore, rate_limiter: RateLimiter
     ) -> None:
         """Initialize conversation service with explicit dependencies.
 
         Args:
             store: Conversation storage backend
-            rate_limiter: Rate limiter instance (optional, will create default if None)
+            rate_limiter: Rate limiter instance
         """
         self.store = store
-        # Import here to avoid circular imports
-        from .security import get_rate_limiter
-        self.rate_limiter = rate_limiter or get_rate_limiter()
+        self.rate_limiter = rate_limiter
 
     def get_or_create_conversation(
         self, conversation_id: str | None = None, client_identifier: str = "unknown"
@@ -174,17 +172,3 @@ class ConversationService:
         return self.store.cleanup_expired()
 
 
-# For backward compatibility during transition
-def get_conversation_service() -> ConversationService:
-    """Get a conversation service instance.
-
-    This is a compatibility function that will be removed after full DI migration.
-    """
-    from .security import RateLimiter
-    from .storage import InMemoryConversationStore
-
-    # Create default instances
-    store = InMemoryConversationStore()
-    rate_limiter = RateLimiter()
-
-    return ConversationService(store=store, rate_limiter=rate_limiter)
