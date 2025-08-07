@@ -1,6 +1,6 @@
 """API models package."""
 
-from .responses import APIResponse, ErrorResponse, HealthResponse, PaginationMeta
+from .responses import APIResponse, ErrorResponse, HealthCheckData, PaginationMeta
 from .workouts import (
     SearchRequest,
     SearchResultModel,
@@ -13,7 +13,7 @@ from .workouts import (
 __all__ = [
     "APIResponse",
     "ErrorResponse",
-    "HealthResponse",
+    "HealthCheckData",
     "PaginationMeta",
     "SearchRequest",
     "SearchResultModel",

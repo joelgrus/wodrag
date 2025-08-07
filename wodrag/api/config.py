@@ -1,7 +1,6 @@
 """API configuration settings."""
 
-
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -24,12 +23,11 @@ class APISettings(BaseSettings):
     )
 
     # OpenAI Settings (inherit from existing env)
-    openai_api_key: str = Field(default="", description="OpenAI API key for embeddings")
+    openai_api_key: SecretStr | None = Field(
+        default=None, description="OpenAI API key for embeddings"
+    )
 
-    model_config = {
-        "env_prefix": "WODRAG_API_",
-        "case_sensitive": False
-    }
+    model_config = {"env_prefix": "WODRAG_API_", "case_sensitive": False}
 
 
 def get_settings() -> APISettings:

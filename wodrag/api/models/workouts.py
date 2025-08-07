@@ -77,3 +77,32 @@ class SearchRequest(BaseModel):
     semantic_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     bm25_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     filters: Union[WorkoutFilterModel, None] = None
+
+
+class WorkoutSearchResult(BaseModel):
+    """Single workout search result with scoring information."""
+
+    workout: WorkoutModel
+    score: float
+    search_type: str  # "hybrid", "semantic", "text"
+    rank: int
+
+
+class NaturalLanguageQueryRequest(BaseModel):
+    """Request for natural language query."""
+
+    question: str = Field(min_length=1, description="Natural language question")
+
+
+class GenerateWorkoutRequest(BaseModel):
+    """Request for workout generation."""
+
+    description: str = Field(min_length=1, description="Description of desired workout")
+    use_hybrid: bool = Field(default=True, description="Use hybrid search for examples")
+
+
+class AgentQueryRequest(BaseModel):
+    """Request for master agent query."""
+
+    question: str = Field(min_length=1, description="Natural language question or request")
+    verbose: bool = Field(default=False, description="Return reasoning trace")

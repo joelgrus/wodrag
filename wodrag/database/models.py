@@ -113,6 +113,11 @@ class SearchResult:
     metadata_match: bool = True
 
     @property
+    def score(self) -> float:
+        """Alias for similarity_score for API compatibility."""
+        return self.similarity_score if self.similarity_score is not None else 0.0
+
+    @property
     def relevance_score(self) -> float:
         if self.similarity_score is None:
             return 1.0 if self.metadata_match else 0.0
