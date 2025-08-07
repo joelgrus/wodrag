@@ -13,21 +13,26 @@ class TextToSQL(dspy.Signature):
     query: str = dspy.InputField(description="Natural language query about workouts")
     db_schema: str = dspy.InputField(description="Database schema information")
     sql_query: str = dspy.OutputField(
-        description="""DuckDB SQL query that answers the natural language query. 
+        description="""DuckDB SQL query that answers the natural language query.
         IMPORTANT: Use 'pg_db.workouts' as the table name (not just 'workouts').
-        IMPORTANT: For array columns (movements, equipment), use PostgreSQL array syntax:
+        IMPORTANT: For array columns (movements, equipment), use PostgreSQL
+        array syntax:
         - Use 'movement' = ANY(movements) not movements LIKE '%movement%'
         - Use 'equipment_item' = ANY(equipment) not equipment LIKE '%item%'
-        IMPORTANT: Always use descriptive column aliases for aggregate and computed columns:
+        IMPORTANT: Always use descriptive column aliases for aggregate and
+        computed columns:
         - Use "AS total_count" or "AS workout_count" instead of bare COUNT(*)
         - Use "AS avg_duration" instead of bare AVG(duration)
         - Use meaningful names based on what is being counted/calculated
         Examples:
         - "SELECT * FROM pg_db.workouts WHERE 'burpees' = ANY(movements) LIMIT 10"
-        - "SELECT COUNT(*) AS hero_workout_count FROM pg_db.workouts WHERE workout_type = 'hero'"
-        - "SELECT workout_type, COUNT(*) AS count FROM pg_db.workouts GROUP BY workout_type ORDER BY count DESC"
+        - "SELECT COUNT(*) AS hero_workout_count FROM pg_db.workouts
+          WHERE workout_type = 'hero'"
+        - "SELECT workout_type, COUNT(*) AS count FROM pg_db.workouts
+          GROUP BY workout_type ORDER BY count DESC"
         - "SELECT * FROM pg_db.workouts WHERE date >= '2023-01-01' ORDER BY date DESC"
-        - "SELECT * FROM pg_db.workouts WHERE 'barbell' = ANY(equipment) AND workout_type = 'strength'"
+        - "SELECT * FROM pg_db.workouts WHERE 'barbell' = ANY(equipment)
+          AND workout_type = 'strength'"
         """
     )
 
@@ -105,12 +110,13 @@ class QueryGenerator:
         ]
 
         schema_text += f"""
-        
+
 Domain Context:
 - This is CrossFit workout data from 2001-2024
 - movements: Array of exercise movements. Common movements: {movements_list}
 - equipment: Array of required equipment. Common equipment: {equipment_list}
-- workout_type: Type of workout ('metcon', 'strength', 'hero', 'girl', 'benchmark', etc.)
+- workout_type: Type of workout ('metcon', 'strength', 'hero', 'girl',
+  'benchmark', etc.)
 - workout_name: Named workouts (e.g., 'Fran', 'Murph', 'Cindy')
 - one_sentence_summary: AI-generated summary of the workout
 
@@ -145,12 +151,12 @@ if __name__ == "__main__":
     ]
 
     for query in test_queries:
-        print(f"\nQuery: {query}")
+        print(f"\nQuery: {query}")  # noqa: T201
         try:
             sql = generator.generate_query(query)
-            print(f"Generated SQL: {sql}")
+            print(f"Generated SQL: {sql}")  # noqa: T201
 
             results = generator.query_and_execute(query)
-            print(f"Results: {len(results)} rows returned")
+            print(f"Results: {len(results)} rows returned")  # noqa: T201
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error: {e}")  # noqa: T201

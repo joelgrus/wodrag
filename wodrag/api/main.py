@@ -1,5 +1,6 @@
 """Litestar application setup."""
 
+import dspy
 from litestar import Litestar
 from litestar.config.cors import CORSConfig
 from litestar.di import Provide
@@ -35,12 +36,18 @@ def provide_workout_generator() -> WorkoutSearchGenerator:
 
 def provide_master_agent() -> MasterAgent:
     """Provide MasterAgent instance for dependency injection."""
+    # Configure DSPy if not already configured
+    if not hasattr(dspy.settings, "lm") or dspy.settings.lm is None:
+        dspy.configure(
+            lm=dspy.LM("openrouter/google/gemini-2.5-flash-lite", max_tokens=10000)
+        )
+
     # Initialize all services that the master agent needs
     workout_repo = WorkoutRepository()
     query_generator = QueryGenerator()
     duckdb_service = DuckDBQueryService()
     workout_generator = WorkoutSearchGenerator()
-    
+
     return MasterAgent(
         workout_repo=workout_repo,
         query_generator=query_generator,

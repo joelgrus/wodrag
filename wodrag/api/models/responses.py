@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Generic, TypeVar, Union
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -45,18 +45,16 @@ class HealthCheckData(BaseModel):
     status: str = Field(..., description="Service status")
     timestamp: datetime = Field(..., description="Check timestamp")
     version: str = Field(..., description="API version")
-    database: Union[str, None] = Field(default=None, description="Database status")
+    database: str | None = Field(default=None, description="Database status")
 
 
 class APIResponse(BaseModel, Generic[T]):
     """Standard API response wrapper."""
 
     success: bool = Field(..., description="Whether the request was successful")
-    data: Union[T, None] = Field(..., description="Response data")
-    error: Union[str, None] = Field(default=None, description="Error message if any")
-    meta: Union[PaginationMeta, None] = Field(
-        default=None, description="Pagination metadata"
-    )
+    data: T | None = Field(..., description="Response data")
+    error: str | None = Field(default=None, description="Error message if any")
+    meta: PaginationMeta | None = Field(default=None, description="Pagination metadata")
 
 
 class SearchResponse(BaseModel):
@@ -68,7 +66,7 @@ class SearchResponse(BaseModel):
     )  # Will be WorkoutSearchResult
     total_results: int = Field(..., description="Total number of results")
     search_type: str = Field(..., description="Type of search performed")
-    semantic_weight: Union[float, None] = Field(
+    semantic_weight: float | None = Field(
         default=None, description="Semantic weight used"
     )
 
@@ -97,6 +95,9 @@ class AgentQueryResponse(BaseModel):
     question: str = Field(..., description="Original question")
     answer: str = Field(..., description="Agent's answer")
     verbose: bool = Field(..., description="Whether reasoning trace was requested")
-    reasoning_trace: Union[list[str], None] = Field(
+    reasoning_trace: list[str] | None = Field(
         default=None, description="Step-by-step reasoning trace (if verbose=True)"
+    )
+    conversation_id: str = Field(
+        ..., description="Conversation ID for this interaction"
     )

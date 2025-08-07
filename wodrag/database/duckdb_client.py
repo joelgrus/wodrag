@@ -52,12 +52,12 @@ class DuckDBQueryService:
     def get_table_schema(self, table_name: str) -> list[dict[str, Any]]:
         """Get schema information for a table."""
         query = f"""
-        SELECT 
-            column_name, 
-            data_type, 
+        SELECT
+            column_name,
+            data_type,
             is_nullable,
             column_default
-        FROM pg_db.information_schema.columns 
+        FROM pg_db.information_schema.columns
         WHERE table_name = '{table_name}'
         ORDER BY ordinal_position
         """
@@ -66,8 +66,8 @@ class DuckDBQueryService:
     def get_available_tables(self) -> list[str]:
         """Get list of available tables in the database."""
         query = """
-        SELECT table_name 
-        FROM pg_db.information_schema.tables 
+        SELECT table_name
+        FROM pg_db.information_schema.tables
         WHERE table_schema = 'public'
         ORDER BY table_name
         """

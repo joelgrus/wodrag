@@ -3,32 +3,31 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class WorkoutModel(BaseModel):
     """Pydantic model for Workout objects."""
 
-    id: Union[int, None] = None
-    date: Union[date, str, None] = None
-    url: Union[str, None] = None
-    raw_text: Union[str, None] = None
-    workout: Union[str, None] = None
-    scaling: Union[str, None] = None
+    id: int | None = None
+    date: date | str | None = None
+    url: str | None = None
+    raw_text: str | None = None
+    workout: str | None = None
+    scaling: str | None = None
     has_video: bool = False
     has_article: bool = False
-    month_file: Union[str, None] = None
-    created_at: Union[str, datetime, None] = None
-    workout_search_vector: Union[str, None] = None
-    workout_embedding: Union[list[float], None] = None
+    month_file: str | None = None
+    created_at: str | datetime | None = None
+    workout_search_vector: str | None = None
+    workout_embedding: list[float] | None = None
     movements: list[str] = Field(default_factory=list)
     equipment: list[str] = Field(default_factory=list)
-    workout_type: Union[str, None] = None
-    workout_name: Union[str, None] = None
-    one_sentence_summary: Union[str, None] = None
-    summary_embedding: Union[list[float], None] = None
+    workout_type: str | None = None
+    workout_name: str | None = None
+    one_sentence_summary: str | None = None
+    summary_embedding: list[float] | None = None
 
     model_config = {"from_attributes": True}
 
@@ -36,23 +35,23 @@ class WorkoutModel(BaseModel):
 class WorkoutFilterModel(BaseModel):
     """Pydantic model for workout filtering parameters."""
 
-    movements: Union[list[str], None] = None
-    equipment: Union[list[str], None] = None
-    workout_type: Union[str, None] = None
-    workout_name: Union[str, None] = None
-    start_date: Union[date, None] = None
-    end_date: Union[date, None] = None
-    has_video: Union[bool, None] = None
-    has_article: Union[bool, None] = None
+    movements: list[str] | None = None
+    equipment: list[str] | None = None
+    workout_type: str | None = None
+    workout_name: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    has_video: bool | None = None
+    has_article: bool | None = None
 
 
 class SearchResultModel(BaseModel):
     """Pydantic model for search results."""
 
     workout: WorkoutModel
-    similarity_score: Union[float, None] = None
-    bm25_score: Union[float, None] = None
-    hybrid_score: Union[float, None] = None
+    similarity_score: float | None = None
+    bm25_score: float | None = None
+    hybrid_score: float | None = None
     metadata_match: bool = True
 
     @property
@@ -76,7 +75,7 @@ class SearchRequest(BaseModel):
     offset: int = Field(default=0, ge=0)
     semantic_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     bm25_weight: float = Field(default=0.5, ge=0.0, le=1.0)
-    filters: Union[WorkoutFilterModel, None] = None
+    filters: WorkoutFilterModel | None = None
 
 
 class WorkoutSearchResult(BaseModel):
@@ -104,5 +103,10 @@ class GenerateWorkoutRequest(BaseModel):
 class AgentQueryRequest(BaseModel):
     """Request for master agent query."""
 
-    question: str = Field(min_length=1, description="Natural language question or request")
+    question: str = Field(
+        min_length=1, description="Natural language question or request"
+    )
     verbose: bool = Field(default=False, description="Return reasoning trace")
+    conversation_id: str | None = Field(
+        default=None, description="Optional conversation ID for context"
+    )

@@ -1,6 +1,6 @@
 """Health check endpoints for Litestar API."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from litestar import Controller, get
 from litestar.response import Response
@@ -23,7 +23,7 @@ class HealthController(Controller):
             APIResponse with health status
         """
         data = HealthCheckData(
-            status="healthy", timestamp=datetime.now(), version="0.1.0"
+            status="healthy", timestamp=datetime.now(UTC), version="0.1.0"
         )
         return Response(APIResponse(success=True, data=data), status_code=HTTP_200_OK)
 
@@ -45,7 +45,7 @@ class HealthController(Controller):
 
             data = HealthCheckData(
                 status="healthy",
-                timestamp=datetime.now(),
+                timestamp=datetime.now(UTC),
                 version="0.1.0",
                 database="connected",
             )
@@ -55,7 +55,7 @@ class HealthController(Controller):
         except Exception as e:
             data = HealthCheckData(
                 status="unhealthy",
-                timestamp=datetime.now(),
+                timestamp=datetime.now(UTC),
                 version="0.1.0",
                 database=f"error: {str(e)}",
             )

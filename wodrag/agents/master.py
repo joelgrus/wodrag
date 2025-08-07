@@ -39,9 +39,11 @@ class MasterAgent(dspy.Module):
             output = []
             for i, result in enumerate(results, 1):
                 w = result.workout
+                summary = w.one_sentence_summary or (
+                    w.workout[:100] if w.workout else ""
+                )
                 output.append(
-                    f"{i}. {w.workout_name or 'Workout'} ({w.date}): "
-                    f"{w.one_sentence_summary or (w.workout[:100] if w.workout else '')}"
+                    f"{i}. {w.workout_name or 'Workout'} ({w.date}): {summary}"
                 )
             return "\n".join(output)
 
@@ -79,7 +81,7 @@ class MasterAgent(dspy.Module):
                 desc=(
                     "Hybrid search for workouts. Input: search query. "
                     "This uses semantic similarity on one-sentence summaries "
-                    "and so is suited for finding which workouts are similar to a given description."
+                    "and is suited for finding similar workouts."
                 ),
                 func=search_workouts,
             ),
@@ -87,9 +89,9 @@ class MasterAgent(dspy.Module):
                 name="query",
                 desc=(
                     "Answer data questions. Input: natural language question. "
-                    "This uses a text-to-SQL generator to convert the question into SQL"
-                    "and queries the DuckDB database. It is suited for answering SQL-like questions "
-                    "involve (for example) aggregation, filtering, and/or ordering."
+                    "This uses a text-to-SQL generator to convert the question "
+                    "into SQL and queries the DuckDB database. Suited for SQL-like "
+                    "questions involving aggregation, filtering, and ordering."
                 ),
                 func=query_database,
             ),
@@ -101,24 +103,66 @@ class MasterAgent(dspy.Module):
         ]
 
         # Use DSPy's ReAct with verbose output
+        # We'll create a custom signature that can handle conversation context
         self.react = dspy.ReAct(
             signature="question -> answer", tools=self.tools, max_iters=5
         )
 
-    def forward(self, question: str, verbose: bool = False) -> str:
-        """Answer a question using ReAct."""
+    def forward(
+        self,
+        question: str,
+        conversation_context: list[dict[str, str]] | None = None,
+        verbose: bool = False,
+    ) -> str:
+        """Answer a question using ReAct with optional conversation context."""
+        # If we have conversation context, incorporate it into the question
+        if conversation_context and len(conversation_context) > 0:
+            # Format conversation history
+            context_str = self._format_conversation_context(conversation_context)
+            enhanced_question = f"""Based on our previous conversation:
+{context_str}
+
+Current question: {question}"""
+        else:
+            enhanced_question = question
+
         if verbose:
             # Enable DSPy's built-in verbose mode
             with dspy.context(show_guidelines=True):
-                result = self.react(question=question)
+                result = self.react(question=enhanced_question)
         else:
-            result = self.react(question=question)
+            result = self.react(question=enhanced_question)
         return str(result.answer)
 
-    def forward_verbose(self, question: str) -> tuple[str, list[str]]:
+    def _format_conversation_context(self, context: list[dict[str, str]]) -> str:
+        """Format conversation context for inclusion in the prompt."""
+        formatted_messages = []
+        for msg in context:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            if role == "user":
+                formatted_messages.append(f"Human: {content}")
+            elif role == "assistant":
+                formatted_messages.append(f"Assistant: {content}")
+
+        return "\n".join(formatted_messages)
+
+    def forward_verbose(
+        self, question: str, conversation_context: list[dict[str, str]] | None = None
+    ) -> tuple[str, list[str]]:
         """Answer a question using ReAct and return the reasoning trace."""
         # Custom implementation to capture the ReAct steps
         trace = []
+
+        # Format question with conversation context if provided
+        if conversation_context and len(conversation_context) > 0:
+            context_str = self._format_conversation_context(conversation_context)
+            enhanced_question = f"""Based on our previous conversation:
+{context_str}
+
+Current question: {question}"""
+        else:
+            enhanced_question = question
 
         # Create wrapper function for tools
         def wrap_tool(tool: Any) -> Any:
@@ -143,7 +187,7 @@ class MasterAgent(dspy.Module):
             signature="question -> answer", tools=wrapped_tools, max_iters=5
         )
 
-        result = react_with_trace(question=question)
+        result = react_with_trace(question=enhanced_question)
 
         return result.answer, trace
 
@@ -204,10 +248,10 @@ if __name__ == "__main__":
 
             # Use the agent to answer the question
             answer = agent(question=question, verbose=True)
-            print(f"Answer: {answer}\n")
+            print(f"Answer: {answer}\n")  # noqa: T201
 
         except KeyboardInterrupt:
-            print("\nExiting...")
+            print("\nExiting...")  # noqa: T201
             break
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"Error: {e}")  # noqa: T201
