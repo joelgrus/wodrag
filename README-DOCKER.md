@@ -1,5 +1,19 @@
 # Docker Deployment Guide
 
+## Prerequisites
+
+You need a database backup from your development environment. The database contains 8,861 CrossFit workouts with embeddings and metadata (~305 MB).
+
+### Create Database Backup (on your local machine)
+
+```bash
+# Create compressed backup (~50-100MB)
+docker exec wodrag_paradedb pg_dump -U postgres wodrag | gzip > wodrag_backup.sql.gz
+
+# Verify backup was created
+ls -lh wodrag_backup.sql.gz
+```
+
 ## Quick Start
 
 ### 1. Clone and Configure
@@ -12,14 +26,38 @@ cd wodrag
 # Copy environment template
 cp env.example .env
 
-# Edit .env and add your OpenAI API key
+# Edit .env and add your API keys
 nano .env
 ```
 
-### 2. Build and Run
+### 2. Transfer Database Backup
 
 ```bash
-# Build and start all services
+# From your local machine, copy backup to VPS
+scp wodrag_backup.sql.gz root@your-vps-ip:/tmp/
+```
+
+### 3. Build and Initialize Database
+
+```bash
+# Start only the database container first
+docker compose -f docker-compose.prod.yml up -d postgres
+
+# Wait for database to be ready
+sleep 5
+
+# Restore the database backup
+gunzip < /tmp/wodrag_backup.sql.gz | docker exec -i wodrag_paradedb psql -U postgres wodrag
+
+# Verify data was loaded
+docker exec wodrag_paradedb psql -U postgres -d wodrag -c "SELECT COUNT(*) FROM workouts;"
+# Should show 8861 workouts
+```
+
+### 4. Start All Services
+
+```bash
+# Now start the backend and frontend
 docker compose -f docker-compose.prod.yml up --build -d
 
 # Check that everything is running
@@ -29,7 +67,7 @@ docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs -f
 ```
 
-### 3. Access the Application
+### 5. Access the Application
 
 Open your browser to: **http://localhost** (or your VPS IP)
 
@@ -135,9 +173,17 @@ lsof -i :5432
 # Check database is healthy
 docker compose -f docker-compose.prod.yml exec postgres pg_isready
 
-# Reinitialize database
-docker compose -f docker-compose.prod.yml down -v
-docker compose -f docker-compose.prod.yml up -d
+# Check if data is loaded
+docker exec wodrag_paradedb psql -U postgres -d wodrag -c "SELECT COUNT(*) FROM workouts;"
+```
+
+### Database is empty
+```bash
+# If you forgot to restore the backup, do it now
+gunzip < /tmp/wodrag_backup.sql.gz | docker exec -i wodrag_paradedb psql -U postgres wodrag
+
+# Then restart the backend
+docker compose -f docker-compose.prod.yml restart backend
 ```
 
 ### Frontend not updating

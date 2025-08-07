@@ -18,8 +18,9 @@ COPY pyproject.toml uv.lock ./
 # Copy application code (needed for editable install)
 COPY wodrag ./wodrag
 COPY scripts ./scripts
-# Only copy reference data, not the huge raw/processed files
+# Copy data files needed for database initialization
 COPY data/reference ./data/reference
+COPY data/processed/json ./data/processed/json
 
 # Install Python dependencies (after code is in place)
 RUN uv pip install --system -e .
