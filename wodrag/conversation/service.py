@@ -1,8 +1,8 @@
 """Conversation management service."""
 
-import uuid
 
-from .models import Conversation
+from .models import Conversation, ConversationValidationError
+from .security import MessageSanitizer, SecureIdGenerator, get_rate_limiter
 from .storage import get_conversation_store
 
 
@@ -13,38 +13,106 @@ class ConversationService:
         self.store = get_conversation_store()
 
     def get_or_create_conversation(
-        self, conversation_id: str | None = None
+        self, conversation_id: str | None = None, client_identifier: str = "unknown"
     ) -> Conversation:
         """
         Get an existing conversation or create a new one.
 
         Args:
             conversation_id: Optional ID of existing conversation
+            client_identifier: Identifier for rate limiting (e.g., IP address)
 
         Returns:
             Conversation object (existing or new)
+
+        Raises:
+            ConversationValidationError: If rate limited or invalid ID
         """
+        # Check rate limiting
+        rate_limiter = get_rate_limiter()
+        if not rate_limiter.is_allowed(client_identifier):
+            raise ConversationValidationError(
+                "Rate limit exceeded. Please wait before creating more conversations."
+            )
+
         if conversation_id:
+            # Validate and sanitize conversation ID
+            try:
+                conversation_id = MessageSanitizer.validate_conversation_id(
+                    conversation_id
+                )
+            except ValueError as e:
+                raise ConversationValidationError(
+                    f"Invalid conversation ID: {e}"
+                ) from e
+
             conversation = self.store.get_conversation(conversation_id)
             if conversation:
                 return conversation
 
-        # Create new conversation
-        new_id = conversation_id or str(uuid.uuid4())
+        # Create new conversation with secure ID
+        new_id = conversation_id or SecureIdGenerator.generate_conversation_id()
         conversation = Conversation.create_new(new_id)
         self.store.save_conversation(conversation)
         return conversation
 
-    def add_user_message(self, conversation_id: str, message: str) -> Conversation:
-        """Add a user message to the conversation."""
-        conversation = self.get_or_create_conversation(conversation_id)
-        conversation.add_message("user", message)
+    def add_user_message(
+        self, conversation_id: str, message: str, client_identifier: str = "unknown"
+    ) -> Conversation:
+        """Add a user message to the conversation with sanitization.
+
+        Args:
+            conversation_id: ID of conversation
+            message: Raw message content
+            client_identifier: Identifier for rate limiting
+
+        Returns:
+            Updated conversation
+
+        Raises:
+            ConversationValidationError: If message is invalid or rate limited
+        """
+        # Check rate limiting
+        rate_limiter = get_rate_limiter()
+        if not rate_limiter.is_allowed(client_identifier):
+            raise ConversationValidationError(
+                "Rate limit exceeded. Please wait before sending more messages."
+            )
+
+        # Sanitize message content
+        try:
+            sanitized_message = MessageSanitizer.sanitize_message(message)
+        except ValueError as e:
+            raise ConversationValidationError(f"Invalid message: {e}") from e
+
+        conversation = self.get_or_create_conversation(
+            conversation_id, client_identifier
+        )
+        conversation.add_message("user", sanitized_message)
         self.store.save_conversation(conversation)
         return conversation
 
-    def add_assistant_message(self, conversation_id: str, message: str) -> Conversation:
-        """Add an assistant message to the conversation."""
-        conversation = self.get_or_create_conversation(conversation_id)
+    def add_assistant_message(
+        self, conversation_id: str, message: str, client_identifier: str = "unknown"
+    ) -> Conversation:
+        """Add an assistant message to the conversation.
+
+        Args:
+            conversation_id: ID of conversation
+            message: Assistant response (trusted, no sanitization)
+            client_identifier: Identifier for context
+
+        Returns:
+            Updated conversation
+        """
+        # Assistant messages are trusted, but still validate length
+        if len(message) > MessageSanitizer.MAX_MESSAGE_LENGTH:
+            # Truncate rather than error for assistant messages
+            message = message[: MessageSanitizer.MAX_MESSAGE_LENGTH - 3] + "..."
+
+        conversation = self.get_or_create_conversation(
+            conversation_id, client_identifier
+        )
         conversation.add_message("assistant", message)
         self.store.save_conversation(conversation)
         return conversation
