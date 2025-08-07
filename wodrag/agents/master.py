@@ -29,9 +29,27 @@ class MasterAgent(dspy.Module):
         self.workout_generator = workout_generator
 
         # Create tool functions that use the injected services
-        def search_workouts(query: str) -> str:
-            """Search for CrossFit workouts."""
-            results = self.workout_repo.hybrid_search(query_text=query, limit=10)
+        def very_keyword_search(query: str) -> str:
+            """Search for specific workout names, movements, or exact keywords."""
+            results = self.workout_repo.hybrid_search(query_text=query, semantic_weight=0.1, limit=10)
+
+            if not results:
+                return "No workouts found."
+
+            output = []
+            for i, result in enumerate(results, 1):
+                w = result.workout
+                summary = w.one_sentence_summary or (
+                    w.workout[:100] if w.workout else ""
+                )
+                output.append(
+                    f"{i}. {w.workout_name or 'Workout'} ({w.date}): {summary}"
+                )
+            return "\n".join(output)
+
+        def very_semantic_search(query: str) -> str:
+            """Search for workouts by meaning, concept, or similarity."""
+            results = self.workout_repo.hybrid_search(query_text=query, semantic_weight=0.9, limit=10)
 
             if not results:
                 return "No workouts found."
@@ -77,13 +95,23 @@ class MasterAgent(dspy.Module):
         # Define tools using the closures
         self.tools = [
             dspy.Tool(
-                name="search",
+                name="very_keyword_search",
                 desc=(
-                    "Hybrid search for workouts. Input: search query. "
-                    "This uses semantic similarity on one-sentence summaries "
-                    "and is suited for finding similar workouts."
+                    "Search for specific workout names, movements, or exact keywords. "
+                    "Use this for queries like 'what is Murph', 'find Fran workout', "
+                    "'workouts with burpees'. Emphasizes exact text matching."
                 ),
-                func=search_workouts,
+                func=very_keyword_search,
+            ),
+            dspy.Tool(
+                name="very_semantic_search", 
+                desc=(
+                    "Search for workouts by meaning, concept, or similarity. "
+                    "Use this for queries like 'find workouts similar to Murph', "
+                    "'high intensity cardio workouts', 'beginner friendly exercises'. "
+                    "Emphasizes conceptual understanding."
+                ),
+                func=very_semantic_search,
             ),
             dspy.Tool(
                 name="query",

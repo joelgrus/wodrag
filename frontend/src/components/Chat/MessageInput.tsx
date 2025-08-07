@@ -1,4 +1,4 @@
-import React, { useState, KeyboardEvent } from 'react';
+import React, { useState, KeyboardEvent, forwardRef, useImperativeHandle, useRef } from 'react';
 
 interface MessageInputProps {
   onSendMessage: (message: string) => void;
@@ -6,12 +6,19 @@ interface MessageInputProps {
   isDarkMode: boolean;
 }
 
-const MessageInput: React.FC<MessageInputProps> = ({ 
+const MessageInput = forwardRef<{ focus: () => void }, MessageInputProps>(({ 
   onSendMessage, 
   disabled = false, 
   isDarkMode 
-}) => {
+}, ref) => {
   const [message, setMessage] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      textareaRef.current?.focus();
+    }
+  }));
 
   const handleSubmit = () => {
     const trimmed = message.trim();
@@ -37,6 +44,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
       <div className="flex items-end space-x-3">
         <div className="flex-1">
           <textarea
+            ref={textareaRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
@@ -92,6 +100,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
       </div>
     </div>
   );
-};
+});
+
+MessageInput.displayName = 'MessageInput';
 
 export default MessageInput;

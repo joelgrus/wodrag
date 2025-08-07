@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import LoadingIndicator from './LoadingIndicator';
@@ -26,6 +26,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ isDarkMode, resetTrigger 
   });
 
   const [chatState, setChatState] = useState<ChatState>(getInitialState);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<{ focus: () => void } | null>(null);
 
   // Reset chat when resetTrigger changes
   useEffect(() => {
@@ -33,6 +36,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ isDarkMode, resetTrigger 
       setChatState(getInitialState());
     }
   }, [resetTrigger]);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatState.messages]);
+
+  // Focus input after loading completes
+  useEffect(() => {
+    if (!chatState.isLoading) {
+      inputRef.current?.focus();
+    }
+  }, [chatState.isLoading]);
 
   const handleSendMessage = async (message: string) => {
     // Add user message
@@ -102,7 +117,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ isDarkMode, resetTrigger 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {chatState.messages.map((message) => (
           <MessageBubble
             key={message.id}
@@ -124,10 +139,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ isDarkMode, resetTrigger 
             <p className="text-sm">Error: {chatState.error}</p>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </div>
       
       {/* Message Input */}
       <MessageInput
+        ref={inputRef}
         onSendMessage={handleSendMessage}
         disabled={chatState.isLoading}
         isDarkMode={isDarkMode}
