@@ -75,8 +75,14 @@ def get_master_agent() -> MasterAgent:
     if _master_agent is None:
         # Configure DSPy if not already configured
         if not hasattr(dspy.settings, "lm") or dspy.settings.lm is None:
+            import os
+            # Use OpenRouter Gemini Flash Lite (cost effective)
             dspy.configure(
-                lm=dspy.LM("openrouter/google/gemini-2.5-flash-lite", max_tokens=10000)
+                lm=dspy.LM(
+                    "openrouter/google/gemini-2.5-flash-lite", 
+                    api_key=os.getenv("OPENROUTER_API_KEY"),
+                    max_tokens=10000
+                )
             )
         
         workout_repo = get_workout_repository()

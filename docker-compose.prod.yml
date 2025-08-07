@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: paradedb/paradedb:latest
+    container_name: wodrag_paradedb
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: wodrag
+      POSTGRES_USER: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/paradedb:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wodrag"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wodrag_network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: wodrag_backend
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/wodrag
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      WODRAG_API_HOST: 0.0.0.0
+      WODRAG_API_PORT: 8000
+      WODRAG_API_CORS_ORIGINS: '["http://localhost","http://localhost:80"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - wodrag_network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: wodrag_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - wodrag_network
+    restart: unless-stopped
+
+networks:
+  wodrag_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

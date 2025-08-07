@@ -1,5 +1,5 @@
 """API routers package."""
 
-from . import agent, health
+from . import agent_fastapi, health_fastapi
 
-__all__ = ["agent", "health"]
+__all__ = ["agent_fastapi", "health_fastapi"]
