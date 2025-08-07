@@ -182,15 +182,10 @@ class RateLimiter:
             del self._requests[identifier]
 
 
-# Global rate limiter instance
-_rate_limiter: RateLimiter | None = None
-
-
+# For backward compatibility during transition
 def get_rate_limiter() -> RateLimiter:
-    """Get the global rate limiter instance."""
-    global _rate_limiter
-    if _rate_limiter is None:
-        _rate_limiter = RateLimiter(
-            max_requests=100, window_seconds=3600
-        )  # 100 req/hour
-    return _rate_limiter
+    """Get a rate limiter instance.
+
+    This is a compatibility function that will be removed after full DI migration.
+    """
+    return RateLimiter(max_requests=100, window_seconds=3600)  # 100 req/hour

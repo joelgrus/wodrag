@@ -2,15 +2,26 @@
 
 
 from .models import Conversation, ConversationValidationError
-from .security import MessageSanitizer, SecureIdGenerator, get_rate_limiter
-from .storage import get_conversation_store
+from .security import MessageSanitizer, RateLimiter, SecureIdGenerator
+from .storage import ConversationStore
 
 
 class ConversationService:
     """Service for managing conversations and their context."""
 
-    def __init__(self) -> None:
-        self.store = get_conversation_store()
+    def __init__(
+        self, store: ConversationStore, rate_limiter: RateLimiter | None = None
+    ) -> None:
+        """Initialize conversation service with explicit dependencies.
+
+        Args:
+            store: Conversation storage backend
+            rate_limiter: Rate limiter instance (optional, will create default if None)
+        """
+        self.store = store
+        # Import here to avoid circular imports
+        from .security import get_rate_limiter
+        self.rate_limiter = rate_limiter or get_rate_limiter()
 
     def get_or_create_conversation(
         self, conversation_id: str | None = None, client_identifier: str = "unknown"
@@ -29,8 +40,7 @@ class ConversationService:
             ConversationValidationError: If rate limited or invalid ID
         """
         # Check rate limiting
-        rate_limiter = get_rate_limiter()
-        if not rate_limiter.is_allowed(client_identifier):
+        if not self.rate_limiter.is_allowed(client_identifier):
             raise ConversationValidationError(
                 "Rate limit exceeded. Please wait before creating more conversations."
             )
@@ -73,8 +83,7 @@ class ConversationService:
             ConversationValidationError: If message is invalid or rate limited
         """
         # Check rate limiting
-        rate_limiter = get_rate_limiter()
-        if not rate_limiter.is_allowed(client_identifier):
+        if not self.rate_limiter.is_allowed(client_identifier):
             raise ConversationValidationError(
                 "Rate limit exceeded. Please wait before sending more messages."
             )
@@ -165,13 +174,17 @@ class ConversationService:
         return self.store.cleanup_expired()
 
 
-# Global service instance
-_conversation_service: ConversationService | None = None
-
-
+# For backward compatibility during transition
 def get_conversation_service() -> ConversationService:
-    """Get the global conversation service instance."""
-    global _conversation_service
-    if _conversation_service is None:
-        _conversation_service = ConversationService()
-    return _conversation_service
+    """Get a conversation service instance.
+
+    This is a compatibility function that will be removed after full DI migration.
+    """
+    from .security import RateLimiter
+    from .storage import InMemoryConversationStore
+
+    # Create default instances
+    store = InMemoryConversationStore()
+    rate_limiter = RateLimiter()
+
+    return ConversationService(store=store, rate_limiter=rate_limiter)

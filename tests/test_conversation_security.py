@@ -227,15 +227,17 @@ class TestRateLimiter:
         assert len(limiter._requests) == 0
     
     def test_global_rate_limiter(self):
-        """Test global rate limiter instance."""
+        """Test global rate limiter compatibility function."""
         limiter1 = get_rate_limiter()
         limiter2 = get_rate_limiter()
         
-        # Should return same instance
-        assert limiter1 is limiter2
-        
-        # Should be a RateLimiter
+        # Both should be RateLimiter instances (but not necessarily the same object)
         assert isinstance(limiter1, RateLimiter)
+        assert isinstance(limiter2, RateLimiter)
+        
+        # Should have same configuration
+        assert limiter1.max_requests == limiter2.max_requests
+        assert limiter1.window_seconds == limiter2.window_seconds
 
 
 class TestSecurityIntegration:
@@ -248,8 +250,8 @@ class TestSecurityIntegration:
         
         # Create service with fresh storage
         storage = InMemoryConversationStore()
-        service = ConversationService()
-        service.store = storage
+        rate_limiter = RateLimiter(max_requests=1000, window_seconds=3600)
+        service = ConversationService(store=storage, rate_limiter=rate_limiter)
         
         # Test message sanitization
         raw_message = "This has <script>alert('xss')</script> dangerous content"
@@ -267,19 +269,15 @@ class TestSecurityIntegration:
         from wodrag.conversation.storage import InMemoryConversationStore
         from wodrag.conversation import ConversationValidationError
         
-        # Create service with fresh storage
+        # Create service with rate-limited limiter
         storage = InMemoryConversationStore()
-        service = ConversationService()
-        service.store = storage
+        rate_limiter = RateLimiter(max_requests=0, window_seconds=3600)  # No requests allowed
+        service = ConversationService(store=storage, rate_limiter=rate_limiter)
         
-        # Mock rate limiter to return False (rate limited)
-        with patch('wodrag.conversation.service.get_rate_limiter') as mock_limiter:
-            mock_limiter.return_value.is_allowed.return_value = False
-            
-            with pytest.raises(ConversationValidationError, match="Rate limit exceeded"):
-                service.add_user_message(
-                    "test-conv", "Test message", client_identifier="test-client"
-                )
+        with pytest.raises(ConversationValidationError, match="Rate limit exceeded"):
+            service.add_user_message(
+                "test-conv", "Test message", client_identifier="test-client"
+            )
     
     def test_conversation_id_validation_integration(self):
         """Test conversation ID validation integration."""
@@ -289,8 +287,8 @@ class TestSecurityIntegration:
         
         # Create service with fresh storage
         storage = InMemoryConversationStore()
-        service = ConversationService()
-        service.store = storage
+        rate_limiter = RateLimiter(max_requests=1000, window_seconds=3600)
+        service = ConversationService(store=storage, rate_limiter=rate_limiter)
         
         # Test invalid conversation ID
         with pytest.raises(ConversationValidationError, match="Invalid conversation ID"):

@@ -11,7 +11,8 @@ from litestar.status_codes import (
 from wodrag.agents.master import MasterAgent
 from wodrag.api.models.responses import AgentQueryResponse, APIResponse
 from wodrag.api.models.workouts import AgentQueryRequest
-from wodrag.conversation import ConversationValidationError, get_conversation_service
+from wodrag.conversation import ConversationValidationError
+from wodrag.conversation.service import ConversationService
 
 
 class AgentController(Controller):
@@ -24,6 +25,7 @@ class AgentController(Controller):
         self,
         data: AgentQueryRequest,
         master_agent: MasterAgent,
+        conversation_service: ConversationService,
         request: Request,
     ) -> Response[APIResponse[AgentQueryResponse]]:
         """Query the master agent with natural language and conversation context.
@@ -31,6 +33,7 @@ class AgentController(Controller):
         Args:
             data: Request with natural language query and optional conversation_id
             master_agent: Injected MasterAgent
+            conversation_service: Injected ConversationService
 
         Returns:
             APIResponse with agent's answer, conversation_id, and optional
@@ -40,8 +43,7 @@ class AgentController(Controller):
             # Get client identifier for rate limiting
             client_ip = request.client.host if request.client else "unknown"
 
-            # Get conversation service
-            conversation_service = get_conversation_service()
+            # conversation_service is injected via DI
 
             # Get or create conversation with rate limiting
             conversation = conversation_service.get_or_create_conversation(

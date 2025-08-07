@@ -144,19 +144,19 @@ class InMemoryConversationStore(ConversationStore):
         return datetime.now(UTC) - conversation.last_updated > self.conversation_ttl
 
 
-# Global store instance - can be configured at startup
-_conversation_store: ConversationStore | None = None
-
-
+# For backward compatibility during transition
 def get_conversation_store() -> ConversationStore:
-    """Get the global conversation store instance."""
-    global _conversation_store
-    if _conversation_store is None:
-        _conversation_store = InMemoryConversationStore()
-    return _conversation_store
+    """Get a conversation store instance.
+
+    This is a compatibility function that will be removed after full DI migration.
+    """
+    return InMemoryConversationStore()
 
 
 def set_conversation_store(store: ConversationStore) -> None:
-    """Set the global conversation store instance."""
-    global _conversation_store
-    _conversation_store = store
+    """Set the global conversation store instance.
+
+    This is a compatibility function that will be removed after full DI migration.
+    """
+    # No-op for now, users should use proper DI instead
+    pass

@@ -5,14 +5,15 @@ from unittest.mock import Mock, patch
 
 from wodrag.conversation.service import ConversationService
 from wodrag.conversation.storage import InMemoryConversationStore
+from wodrag.conversation.security import RateLimiter
 
 
 @pytest.fixture
 def service():
     """Create a conversation service with fresh storage for each test."""
     storage = InMemoryConversationStore()
-    service = ConversationService()
-    service.store = storage  # Override with our test storage
+    rate_limiter = RateLimiter(max_requests=1000, window_seconds=3600)  # High limit for tests
+    service = ConversationService(store=storage, rate_limiter=rate_limiter)
     return service
 
 
