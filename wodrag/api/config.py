@@ -14,7 +14,7 @@ class APISettings(BaseSettings):
     log_level: str = Field(default="info", description="Logging level")
 
     # CORS Settings
-    cors_origins: list[str] = Field(default=["*"], description="Allowed CORS origins")
+    cors_origins: list[str] = Field(default=["http://localhost:3000"], description="Allowed CORS origins")
 
     # Database Settings (inherit from existing env)
     database_url: str = Field(

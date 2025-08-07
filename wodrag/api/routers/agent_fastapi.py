@@ -1,5 +1,6 @@
 """Master agent endpoint for FastAPI."""
 
+import logging
 from fastapi import APIRouter, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
@@ -36,14 +37,14 @@ async def query_agent(
         # Get client identifier for rate limiting
         client_ip = request.client.host if request.client else "unknown"
 
-        # DEBUG: Log the incoming request
-        print(f"🔍 API Request - Question: '{data.question}', Conversation ID: {data.conversation_id}, Client: {client_ip}")
+        # Log the incoming request
+        logging.info(f"Agent query request - Question: '{data.question[:50]}...', Conversation ID: {data.conversation_id}, Client: {client_ip}")
 
         # Get or create conversation with rate limiting
         conversation = conversation_service.get_or_create_conversation(
             data.conversation_id, client_identifier=client_ip
         )
-        print(f"🔍 Got conversation: {conversation.id}, Messages: {len(conversation.messages)}")
+        logging.debug(f"Retrieved conversation: {conversation.id}, Messages: {len(conversation.messages)}")
 
         # Add user message to conversation with sanitization
         conversation_service.add_user_message(
@@ -54,17 +55,15 @@ async def query_agent(
         conversation_context = conversation_service.get_conversation_context(
             conversation.id
         )
-        print(f"🔍 Conversation context: {len(conversation_context)} messages")
-        for i, msg in enumerate(conversation_context):
-            print(f"   {i+1}. {msg['role']}: {msg['content'][:50]}...")
+        logging.debug(f"Conversation context: {len(conversation_context)} messages")
 
-        print(f"🔍 Calling master agent with verbose={data.verbose}")
+        logging.debug(f"Calling master agent with verbose={data.verbose}")
         if data.verbose:
             # Get answer with reasoning trace
             answer, trace = master_agent.forward_verbose(
                 data.question, conversation_context=conversation_context
             )
-            print(f"🔍 Got verbose answer: {answer[:50]}...")
+            logging.debug(f"Got verbose answer: {answer[:50]}...")
             response_data = AgentQueryResponse(
                 question=data.question,
                 answer=answer,
@@ -79,21 +78,20 @@ async def query_agent(
                 conversation_context=conversation_context,
                 verbose=False,
             )
-            print(f"🔍 Got answer: {answer[:50]}...")
+            logging.debug(f"Got answer: {answer[:50]}...")
             response_data = AgentQueryResponse(
                 question=data.question,
                 answer=answer,
                 verbose=False,
                 conversation_id=conversation.id,
             )
-        print(f"🔍 Created response data, about to save assistant message")
+        logging.debug("Saving assistant response to conversation")
 
         # Add assistant message to conversation
-        print(f"🔍 Adding assistant response: {answer[:50]}...")
         conversation_service.add_assistant_message(
             conversation.id, answer, client_identifier=client_ip
         )
-        print(f"🔍 Assistant message added successfully")
+        logging.debug("Assistant message saved successfully")
 
         return APIResponse(success=True, data=response_data)
         
@@ -111,9 +109,7 @@ async def query_agent(
         )
     except Exception as e:
         # Log the full error for debugging
-        import traceback
-        print(f"Agent query error: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
+        logging.error(f"Agent query error: {e}", exc_info=True)
 
         return JSONResponse(
             content=APIResponse(success=False, data=None, error=str(e)).dict(),

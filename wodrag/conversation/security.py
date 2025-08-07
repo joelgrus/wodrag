@@ -111,16 +111,18 @@ class SecureIdGenerator:
 class RateLimiter:
     """Simple in-memory rate limiter for conversation operations."""
 
-    def __init__(self, max_requests: int = 100, window_seconds: int = 3600):
+    def __init__(self, max_requests: int = 100, window_seconds: int = 3600, max_identifiers: int = 10000):
         """
         Initialize rate limiter.
 
         Args:
             max_requests: Maximum requests per window
             window_seconds: Time window in seconds
+            max_identifiers: Maximum number of unique identifiers to track
         """
         self.max_requests = max_requests
         self.window_seconds = window_seconds
+        self.max_identifiers = max_identifiers
         self._requests: dict[str, list[float]] = {}
 
     def is_allowed(self, identifier: str) -> bool:
@@ -152,6 +154,13 @@ class RateLimiter:
         # Check if under limit
         if len(self._requests[identifier]) >= self.max_requests:
             return False
+
+        # Check if we're tracking too many identifiers
+        if len(self._requests) >= self.max_identifiers and identifier not in self._requests:
+            # Remove the oldest identifier (simple LRU-like eviction)
+            oldest_identifier = min(self._requests.keys(), 
+                                  key=lambda k: min(self._requests[k]) if self._requests[k] else 0)
+            del self._requests[oldest_identifier]
 
         # Record this request
         self._requests[identifier].append(current_time)
