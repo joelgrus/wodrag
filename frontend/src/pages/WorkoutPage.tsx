@@ -9,12 +9,13 @@ interface WorkoutPageProps {
 
 function formatDateLabel(iso?: string | null): string {
   if (!iso) return '';
-  try {
-    const d = new Date(iso);
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-  } catch {
-    return iso;
-  }
+  // Treat ISO date as a plain date (no timezone). Avoid Date(iso) which parses as UTC.
+  const parts = iso.split('-');
+  if (parts.length !== 3) return iso;
+  const [y, m, d] = parts.map((p) => Number(p));
+  if (!y || !m || !d) return iso;
+  const local = new Date(y, m - 1, d); // Local time, no TZ shift
+  return local.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 function dateToHashPath(iso?: string | null): string | null {
