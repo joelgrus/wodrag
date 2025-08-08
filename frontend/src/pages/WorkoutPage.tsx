@@ -32,6 +32,7 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
   const [data, setData] = useState<WorkoutWithSimilar | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [targetIso, setTargetIso] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -44,6 +45,7 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
         setLoading(false);
         return;
       }
+      setTargetIso(`${params.year}-${String(params.month).padStart(2,'0')}-${String(params.day).padStart(2,'0')}`);
       setLoading(true);
       setError(null);
       const res: ApiResponse<WorkoutWithSimilar> = await apiService.getWorkoutByDate(
@@ -82,8 +84,34 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
 
   if (error || !data) {
     return (
-      <div className="p-6">
-        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-red-900/20 border border-red-800 text-red-200' : 'bg-red-50 border border-red-200 text-red-700'}`}>Error: {error || 'No data'}</div>
+      <div className="p-6 space-y-4">
+        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-red-900/20 border border-red-800 text-red-200' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+          {error?.includes('404') ? 'No workout found for that date.' : `Error: ${error || 'No data'}`}
+        </div>
+        <div className="flex items-center gap-3">
+          <label className={isDarkMode ? 'text-gray-300' : 'text-gray-700'}>
+            Jump to date:
+          </label>
+          <input
+            type="date"
+            value={targetIso ?? ''}
+            onChange={(e) => setTargetIso(e.target.value)}
+            className={`px-3 py-2 rounded-md ring-1 ring-inset ${isDarkMode ? 'bg-white/5 text-gray-100 ring-white/10' : 'bg-white text-gray-900 ring-slate-300'}`}
+          />
+          <button
+            onClick={() => {
+              if (!targetIso) return;
+              const [y, m, d] = targetIso.split('-');
+              if (y && m && d) {
+                window.location.hash = `#/workouts/${y}/${m}/${d}`;
+                window.location.reload();
+              }
+            }}
+            className={`px-3 py-2 rounded-md ${isDarkMode ? 'bg-brand-600 hover:bg-brand-700 text-white' : 'bg-brand-600 hover:bg-brand-700 text-white'}`}
+          >
+            Go
+          </button>
+        </div>
       </div>
     );
   }
@@ -95,9 +123,24 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
   return (
     <div className="p-4 sm:p-6">
       <div className="flex items-baseline justify-between gap-4">
-        <div>
+        <div className="flex items-center gap-3 flex-wrap">
           <h2 className="text-xl font-semibold">{title}</h2>
           <div className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>{dateLabel}</div>
+          <div className="flex items-center gap-2 ml-auto">
+            <input
+              type="date"
+              value={w.date ?? ''}
+              onChange={(e) => {
+                const iso = e.target.value;
+                const [y, m, d] = iso.split('-');
+                if (y && m && d) {
+                  window.location.hash = `#/workouts/${y}/${m}/${d}`;
+                  window.location.reload();
+                }
+              }}
+              className={`px-2 py-1 rounded-md ring-1 ring-inset text-sm ${isDarkMode ? 'bg-white/5 text-gray-100 ring-white/10' : 'bg-white text-gray-900 ring-slate-300'}`}
+            />
+          </div>
         </div>
         {w.url ? (
           <a href={w.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-md bg-brand-600 hover:bg-brand-700 text-white">
