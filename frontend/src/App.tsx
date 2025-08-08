@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Header from './components/Header/Header';
 import ChatInterface from './components/Chat/ChatInterface';
+import WorkoutPage from './pages/WorkoutPage';
 
 function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -11,6 +12,7 @@ function App() {
   });
 
   const [resetTrigger, setResetTrigger] = useState(0);
+  const [path, setPath] = useState<string>(window.location.pathname);
 
   const toggleTheme = () => {
     const newTheme = !isDarkMode;
@@ -19,8 +21,20 @@ function App() {
   };
 
   const handleNewChat = () => {
+    // Navigate to root and reset chat
+    if (window.location.pathname !== '/') {
+      window.history.pushState({}, '', '/');
+      setPath('/');
+    }
     setResetTrigger(prev => prev + 1);
   };
+
+  // Lightweight router: update on back/forward
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   // Sync a global theme class to <html> for background fallbacks
   useEffect(() => {
@@ -62,7 +76,11 @@ function App() {
               backdropFilter: 'blur(8px)'
             }}
           >
-            <ChatInterface isDarkMode={isDarkMode} resetTrigger={resetTrigger} />
+            {/^\/workouts\//.test(path) ? (
+              <WorkoutPage isDarkMode={isDarkMode} />
+            ) : (
+              <ChatInterface isDarkMode={isDarkMode} resetTrigger={resetTrigger} />
+            )}
           </div>
         </main>
       </div>

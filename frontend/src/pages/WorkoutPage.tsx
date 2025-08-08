@@ -1,0 +1,165 @@
+import React, { useEffect, useState } from 'react';
+import { apiService } from '../services/api';
+import { ApiResponse } from '../types/api';
+import { WorkoutWithSimilar, Workout, SearchResultModel } from '../types/workout';
+
+interface WorkoutPageProps {
+  isDarkMode: boolean;
+}
+
+function formatDateLabel(iso?: string | null): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  } catch {
+    return iso;
+  }
+}
+
+function dateToPath(iso?: string | null): string | null {
+  if (!iso) return null;
+  const [y, m, d] = iso.split('-');
+  if (!y || !m || !d) return null;
+  return `/workouts/${y}/${m}/${d}`;
+}
+
+const SectionCard: React.FC<{ isDarkMode: boolean; children: React.ReactNode; className?: string }> = ({ isDarkMode, children, className }) => (
+  <div className={`rounded-xl ring-1 ring-inset ${isDarkMode ? 'bg-white/5 ring-white/10' : 'bg-white ring-slate-200'} ${className ?? ''}`}>{children}</div>
+);
+
+const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
+  const [data, setData] = useState<WorkoutWithSimilar | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function run() {
+      const match = window.location.pathname.match(/^\/workouts\/(\d{4})\/(\d{2})\/(\d{2})$/);
+      const params = match ? { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) } : null;
+      if (!params) {
+        setError('Invalid path');
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      const res: ApiResponse<WorkoutWithSimilar> = await apiService.getWorkoutByDate(
+        params.year,
+        params.month,
+        params.day,
+        5,
+        'summary'
+      );
+      if (!mounted) return;
+      if (res.success && res.data) {
+        setData(res.data);
+      } else {
+        setError(res.error || 'Failed to load workout');
+      }
+      setLoading(false);
+    }
+    run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className={`animate-pulse h-6 w-40 rounded ${isDarkMode ? 'bg-white/10' : 'bg-slate-200'}`} />
+        <div className="mt-4 space-y-2">
+          <div className={`h-4 rounded ${isDarkMode ? 'bg-white/10' : 'bg-slate-200'}`} />
+          <div className={`h-4 rounded w-5/6 ${isDarkMode ? 'bg-white/10' : 'bg-slate-200'}`} />
+          <div className={`h-4 rounded w-2/3 ${isDarkMode ? 'bg-white/10' : 'bg-slate-200'}`} />
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="p-6">
+        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-red-900/20 border border-red-800 text-red-200' : 'bg-red-50 border border-red-200 text-red-700'}`}>Error: {error || 'No data'}</div>
+      </div>
+    );
+  }
+
+  const w: Workout = data.workout;
+  const title = w.workout_name || 'Workout of the Day';
+  const dateLabel = formatDateLabel(w.date || null);
+
+  return (
+    <div className="p-4 sm:p-6">
+      <div className="flex items-baseline justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold">{title}</h2>
+          <div className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>{dateLabel}</div>
+        </div>
+        {w.url ? (
+          <a href={w.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-md bg-brand-600 hover:bg-brand-700 text-white">
+            View on CrossFit.com
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 3h7m0 0v7m0-7L10 14"/></svg>
+          </a>
+        ) : null}
+      </div>
+
+      {/* Summary / details */}
+      <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <SectionCard isDarkMode={isDarkMode} className="lg:col-span-2 p-4">
+          <div className="space-y-3">
+            {w.one_sentence_summary ? (
+              <p className={isDarkMode ? 'text-gray-200' : 'text-gray-800'}>{w.one_sentence_summary}</p>
+            ) : null}
+            {w.workout ? (
+              <div>
+                <div className={`text-sm uppercase tracking-wide ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Workout</div>
+                <pre className={`whitespace-pre-wrap leading-relaxed ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{w.workout}</pre>
+              </div>
+            ) : null}
+            {w.scaling ? (
+              <div>
+                <div className={`text-sm uppercase tracking-wide ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Scaling</div>
+                <pre className={`whitespace-pre-wrap leading-relaxed ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{w.scaling}</pre>
+              </div>
+            ) : null}
+          </div>
+        </SectionCard>
+
+        <SectionCard isDarkMode={isDarkMode} className="p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold">Similar Workouts</h3>
+            <button onClick={() => window.location.reload()} className={`text-sm ${isDarkMode ? 'text-brand-300 hover:text-brand-200' : 'text-brand-700 hover:text-brand-800'}`}>Refresh</button>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {data.similar.map((s: SearchResultModel, idx) => {
+              const sw = s.workout;
+              const path = dateToPath(sw.date || null);
+              return (
+                <li key={(sw.id ?? idx) + 'sim'} className={`rounded-lg p-3 ring-1 ring-inset hover:translate-x-[1px] transition ${isDarkMode ? 'bg-white/5 ring-white/10 hover:bg-white/10' : 'bg-white ring-slate-200 hover:bg-slate-50'}`}>
+                  <a href={path ?? sw.url ?? '#'} className="block">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium truncate">
+                        {sw.workout_name || formatDateLabel(sw.date || null) || 'Workout'}
+                      </div>
+                      {typeof s.similarity_score === 'number' ? (
+                        <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{(s.similarity_score * 100).toFixed(0)}%</div>
+                      ) : null}
+                    </div>
+                    {sw.one_sentence_summary ? (
+                      <div className={`mt-1 text-sm line-clamp-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>{sw.one_sentence_summary}</div>
+                    ) : null}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </SectionCard>
+      </div>
+    </div>
+  );
+};
+
+export default WorkoutPage;

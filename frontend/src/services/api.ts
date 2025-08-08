@@ -1,4 +1,5 @@
 import { ApiResponse, AgentQueryRequest, AgentQueryResponse } from '../types/api';
+import { WorkoutWithSimilar } from '../types/workout';
 
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
   ? '/api/v1'  // In production, use relative URL (proxied)
@@ -75,6 +76,19 @@ export class ApiService {
       method: 'POST',
       body: JSON.stringify(request),
     });
+  }
+
+  public async getWorkoutByDate(
+    year: number,
+    month: number,
+    day: number,
+    similarLimit = 5,
+    embedding: 'summary' | 'workout' = 'summary',
+  ): Promise<ApiResponse<WorkoutWithSimilar>> {
+    const m = String(month).padStart(2, '0');
+    const d = String(day).padStart(2, '0');
+    const qs = new URLSearchParams({ similar_limit: String(similarLimit), embedding }).toString();
+    return this.makeRequest<WorkoutWithSimilar>(`/workouts/${year}/${m}/${d}?${qs}`);
   }
 }
 
