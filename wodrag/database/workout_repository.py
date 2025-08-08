@@ -95,7 +95,11 @@ class WorkoutRepository:
         """
         try:
             with self._get_pg_connection() as conn, conn.cursor() as cursor:
-                cursor.execute("SELECT * FROM workouts WHERE date = %s LIMIT 1", (workout_date,))
+                # Cast to date on both sides to be robust if column type differs
+                cursor.execute(
+                    "SELECT * FROM workouts WHERE date::date = %s::date ORDER BY id LIMIT 1",
+                    (workout_date,),
+                )
                 row = cursor.fetchone()
                 if row:
                     columns = (
