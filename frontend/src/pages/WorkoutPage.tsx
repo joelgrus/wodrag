@@ -17,11 +17,11 @@ function formatDateLabel(iso?: string | null): string {
   }
 }
 
-function dateToPath(iso?: string | null): string | null {
+function dateToHashPath(iso?: string | null): string | null {
   if (!iso) return null;
   const [y, m, d] = iso.split('-');
   if (!y || !m || !d) return null;
-  return `/workouts/${y}/${m}/${d}`;
+  return `#/workouts/${y}/${m}/${d}`;
 }
 
 const SectionCard: React.FC<{ isDarkMode: boolean; children: React.ReactNode; className?: string }> = ({ isDarkMode, children, className }) => (
@@ -36,7 +36,8 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
   useEffect(() => {
     let mounted = true;
     async function run() {
-      const match = window.location.pathname.match(/^\/workouts\/(\d{4})\/(\d{2})\/(\d{2})$/);
+      const raw = window.location.hash ? window.location.hash.slice(1) : window.location.pathname;
+      const match = raw.match(/^\/workouts\/(\d{4})\/(\d{2})\/(\d{2})$/);
       const params = match ? { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) } : null;
       if (!params) {
         setError('Invalid path');
@@ -136,7 +137,7 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
           <ul className="mt-3 space-y-2">
             {data.similar.map((s: SearchResultModel, idx) => {
               const sw = s.workout;
-              const path = dateToPath(sw.date || null);
+              const path = dateToHashPath(sw.date || null);
               return (
                 <li key={(sw.id ?? idx) + 'sim'} className={`rounded-lg p-3 ring-1 ring-inset hover:translate-x-[1px] transition ${isDarkMode ? 'bg-white/5 ring-white/10 hover:bg-white/10' : 'bg-white ring-slate-200 hover:bg-slate-50'}`}>
                   <a href={path ?? sw.url ?? '#'} className="block">

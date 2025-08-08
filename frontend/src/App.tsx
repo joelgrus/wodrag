@@ -12,7 +12,9 @@ function App() {
   });
 
   const [resetTrigger, setResetTrigger] = useState(0);
-  const [path, setPath] = useState<string>(window.location.pathname);
+  // Prefer hash-based routing for dev server compatibility
+  const getPath = () => (window.location.hash ? window.location.hash.slice(1) : window.location.pathname);
+  const [path, setPath] = useState<string>(getPath());
 
   const toggleTheme = () => {
     const newTheme = !isDarkMode;
@@ -29,11 +31,20 @@ function App() {
     setResetTrigger(prev => prev + 1);
   };
 
-  // Lightweight router: update on back/forward
+  // Lightweight router: update on back/forward or hash changes
   useEffect(() => {
-    const onPop = () => setPath(window.location.pathname);
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
+    const onChange = () => setPath(getPath());
+    window.addEventListener('popstate', onChange);
+    window.addEventListener('hashchange', onChange);
+    // If user loads a deep link like /workouts/... in dev, redirect to hash route
+    if (!window.location.hash && /^\/workouts\//.test(window.location.pathname)) {
+      const newHash = `#${window.location.pathname}${window.location.search}`;
+      window.location.replace(newHash);
+    }
+    return () => {
+      window.removeEventListener('popstate', onChange);
+      window.removeEventListener('hashchange', onChange);
+    };
   }, []);
 
   // Sync a global theme class to <html> for background fallbacks
