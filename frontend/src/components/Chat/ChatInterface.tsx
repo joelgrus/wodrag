@@ -117,7 +117,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ isDarkMode, resetTrigger 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Messages Container */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div
+        ref={scrollContainerRef}
+        className={`flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 theme-transition ${
+          isDarkMode ? 'bg-transparent' : 'bg-transparent'
+        }`}
+      >
         {chatState.messages.map((message) => (
           <MessageBubble
             key={message.id}

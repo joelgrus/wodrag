@@ -11,7 +11,57 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Fallback background when gradient wrapper doesn't cover fully */
+html.theme-dark body {
+  background-color: #0a0f1e;
+}
+html.theme-light body {
+  background-color: #ffffff;
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* Modern background helpers */
+.app-gradient-light {
+  background: radial-gradient(800px circle at 0% 0%, rgba(59,130,246,0.10), transparent 40%),
+              radial-gradient(600px circle at 100% 0%, rgba(99,102,241,0.08), transparent 35%),
+              linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+}
+
+.app-gradient-dark {
+  background: radial-gradient(900px circle at 0% 0%, rgba(59,130,246,0.12), transparent 40%),
+              radial-gradient(700px circle at 100% 100%, rgba(99,102,241,0.10), transparent 40%),
+              linear-gradient(180deg, #0a0f1e 0%, #0c1222 100%);
+}
+
+/* Subtle dot grid overlay */
+.bg-dotgrid-light {
+  background-image: radial-gradient(rgba(2,6,23,0.08) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.bg-dotgrid-dark {
+  background-image: radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+/* Dark surfaces */
+.dark-surface {
+  background-color: rgba(255,255,255,0.06);
+}
+
+/* Smooth theme transitions */
+.theme-transition {
+  transition-property: background-color, color, border-color, box-shadow, fill, stroke;
+  transition-duration: 250ms;
+}
+
+/* Nice shadow for floating cards */
+.shadow-elevated {
+  box-shadow:
+    0 10px 15px -3px rgba(0,0,0,0.1),
+    0 4px 6px -2px rgba(0,0,0,0.05);
 }

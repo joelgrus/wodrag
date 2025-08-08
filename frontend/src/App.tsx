@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Header from './components/Header/Header';
 import ChatInterface from './components/Chat/ChatInterface';
 
@@ -22,22 +22,49 @@ function App() {
     setResetTrigger(prev => prev + 1);
   };
 
+  // Sync a global theme class to <html> for background fallbacks
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDarkMode) {
+      root.classList.add('theme-dark');
+      root.classList.remove('theme-light');
+    } else {
+      root.classList.add('theme-light');
+      root.classList.remove('theme-dark');
+    }
+  }, [isDarkMode]);
+
   return (
-    <div className={`min-h-screen transition-colors duration-200 ${
-      isDarkMode 
-        ? 'bg-gray-900 text-gray-100' 
-        : 'bg-gray-50 text-gray-900'
-    }`}>
-      <div className="flex flex-col h-screen max-w-4xl mx-auto">
-        <Header 
-          isDarkMode={isDarkMode} 
+    <div
+      className={`min-h-screen theme-transition ${
+        isDarkMode
+          ? 'text-gray-100 app-gradient-dark bg-dotgrid-dark'
+          : 'text-gray-900 app-gradient-light bg-dotgrid-light'
+      }`}
+      style={{ minHeight: '100vh' }}
+    >
+      <div className="flex flex-col" style={{ minHeight: '100vh' }}>
+        <Header
+          isDarkMode={isDarkMode}
           onToggleTheme={toggleTheme}
           onNewChat={handleNewChat}
         />
-        <ChatInterface 
-          isDarkMode={isDarkMode} 
-          resetTrigger={resetTrigger}
-        />
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <div
+            className={`mx-auto max-w-4xl rounded-2xl border backdrop-blur theme-transition shadow-elevated ${
+              isDarkMode
+                ? 'bg-white/10 border-white/10'
+                : 'bg-white/90 border-slate-200'
+            }`}
+            style={{
+              /* Subtle glass effect for light theme */
+              WebkitBackdropFilter: 'blur(8px)',
+              backdropFilter: 'blur(8px)'
+            }}
+          >
+            <ChatInterface isDarkMode={isDarkMode} resetTrigger={resetTrigger} />
+          </div>
+        </main>
       </div>
     </div>
   );
