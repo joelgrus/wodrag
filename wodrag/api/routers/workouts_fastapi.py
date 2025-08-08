@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Literal
 
 from wodrag.api.main_fastapi import get_workout_repository
 from wodrag.api.models.responses import APIResponse
@@ -34,6 +35,7 @@ def get_workout_by_date(
     month: int,
     day: int,
     similar_limit: int = Query(5, ge=0, le=50, description="Number of similar workouts to include"),
+    embedding: Literal["summary", "workout"] = Query("summary", description="Embedding to use for similarity"),
     repo: WorkoutRepository = Depends(get_workout_repository),
 ):
     """Return the workout for a specific date plus N most similar workouts.
@@ -55,7 +57,7 @@ def get_workout_by_date(
     similar_models: list[SearchResultModel] = []
     if similar_limit > 0 and workout.id is not None:
         try:
-            similar = repo.get_similar_workouts(workout.id, limit=similar_limit)
+            similar = repo.get_similar_workouts(workout.id, limit=similar_limit, embedding=embedding)
             for s in similar:
                 similar_models.append(
                     SearchResultModel(

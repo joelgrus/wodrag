@@ -109,36 +109,39 @@ class WorkoutRepository:
         except psycopg2.Error:
             return None
 
-    def get_similar_workouts(self, workout_id: int, limit: int = 5) -> list[SearchResult]:
-        """Find workouts similar to the given workout using summary embedding.
+    def get_similar_workouts(
+        self, workout_id: int, limit: int = 5, embedding: str = "summary"
+    ) -> list[SearchResult]:
+        """Find workouts similar to the given workout using a chosen embedding.
 
-        Uses pgvector distance to the target workout's summary_embedding. If the
+        Uses pgvector distance to the target workout's embedding. If the
         target workout has no embedding, returns an empty list.
 
         Args:
             workout_id: ID of the anchor workout
             limit: number of similar workouts to return
+            embedding: "summary" to use one_sentence_summary embedding (default),
+                or "workout" to use full workout text embedding
 
         Returns:
             A list of SearchResult with similarity scores (cosine similarity)
         """
         try:
             with self._get_pg_connection() as conn, conn.cursor() as cursor:
+                col = "summary_embedding" if embedding != "workout" else "workout_embedding"
                 # Ensure the anchor has an embedding
-                cursor.execute(
-                    "SELECT summary_embedding FROM workouts WHERE id = %s", (workout_id,)
-                )
+                cursor.execute(f"SELECT {col} FROM workouts WHERE id = %s", (workout_id,))
                 anchor = cursor.fetchone()
                 if not anchor or anchor[0] is None:
                     return []
 
                 # Select others ordered by distance to the anchor's embedding
-                sql = """
-                    SELECT w.*, 1 - (w.summary_embedding <=> anchor.summary_embedding) as similarity
+                sql = f"""
+                    SELECT w.*, 1 - (w.{col} <=> anchor.emb) as similarity
                     FROM workouts w
-                    CROSS JOIN (SELECT summary_embedding FROM workouts WHERE id = %s) AS anchor
-                    WHERE w.summary_embedding IS NOT NULL AND w.id <> %s
-                    ORDER BY w.summary_embedding <=> anchor.summary_embedding
+                    CROSS JOIN (SELECT {col} AS emb FROM workouts WHERE id = %s) AS anchor
+                    WHERE w.{col} IS NOT NULL AND w.id <> %s
+                    ORDER BY w.{col} <=> anchor.emb
                     LIMIT %s
                 """
                 cursor.execute(sql, (workout_id, workout_id, limit))
