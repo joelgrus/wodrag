@@ -84,6 +84,87 @@ class WorkoutRepository:
         except psycopg2.Error:
             return None
 
+    def get_workout_by_date(self, workout_date: date) -> Workout | None:
+        """Get a single workout by exact date using PostgreSQL.
+
+        Args:
+            workout_date: Date to look up (YYYY-MM-DD)
+
+        Returns:
+            Workout if found, otherwise None
+        """
+        try:
+            with self._get_pg_connection() as conn, conn.cursor() as cursor:
+                cursor.execute("SELECT * FROM workouts WHERE date = %s LIMIT 1", (workout_date,))
+                row = cursor.fetchone()
+                if row:
+                    columns = (
+                        [desc[0] for desc in cursor.description]
+                        if cursor.description
+                        else []
+                    )
+                    row_dict = dict(zip(columns, row, strict=False))
+                    return Workout.from_dict(row_dict)
+                return None
+        except psycopg2.Error:
+            return None
+
+    def get_similar_workouts(self, workout_id: int, limit: int = 5) -> list[SearchResult]:
+        """Find workouts similar to the given workout using summary embedding.
+
+        Uses pgvector distance to the target workout's summary_embedding. If the
+        target workout has no embedding, returns an empty list.
+
+        Args:
+            workout_id: ID of the anchor workout
+            limit: number of similar workouts to return
+
+        Returns:
+            A list of SearchResult with similarity scores (cosine similarity)
+        """
+        try:
+            with self._get_pg_connection() as conn, conn.cursor() as cursor:
+                # Ensure the anchor has an embedding
+                cursor.execute(
+                    "SELECT summary_embedding FROM workouts WHERE id = %s", (workout_id,)
+                )
+                anchor = cursor.fetchone()
+                if not anchor or anchor[0] is None:
+                    return []
+
+                # Select others ordered by distance to the anchor's embedding
+                sql = """
+                    SELECT w.*, 1 - (w.summary_embedding <=> anchor.summary_embedding) as similarity
+                    FROM workouts w
+                    CROSS JOIN (SELECT summary_embedding FROM workouts WHERE id = %s) AS anchor
+                    WHERE w.summary_embedding IS NOT NULL AND w.id <> %s
+                    ORDER BY w.summary_embedding <=> anchor.summary_embedding
+                    LIMIT %s
+                """
+                cursor.execute(sql, (workout_id, workout_id, limit))
+                rows = cursor.fetchall()
+                columns = (
+                    [desc[0] for desc in cursor.description]
+                    if cursor.description
+                    else []
+                )
+
+                results: list[SearchResult] = []
+                for row in rows:
+                    row_dict = dict(zip(columns, row, strict=False))
+                    similarity = float(row_dict.pop("similarity", 0.0) or 0.0)
+                    workout = Workout.from_dict(row_dict)
+                    results.append(
+                        SearchResult(
+                            workout=workout,
+                            similarity_score=similarity,
+                            metadata_match=True,
+                        )
+                    )
+                return results
+        except (psycopg2.Error, ValueError) as e:
+            raise RuntimeError(f"Failed to fetch similar workouts: {e}") from e
+
     def update_workout_metadata(
         self,
         workout_id: int,

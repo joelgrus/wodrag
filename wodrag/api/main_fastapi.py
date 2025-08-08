@@ -119,9 +119,10 @@ def create_app() -> FastAPI:
     )
 
     # Include routers
-    from wodrag.api.routers import agent_fastapi, health_fastapi
+    from wodrag.api.routers import agent_fastapi, health_fastapi, workouts_fastapi
     app.include_router(agent_fastapi.router, prefix="/api/v1")
     app.include_router(health_fastapi.router, prefix="/api/v1")
+    app.include_router(workouts_fastapi.router, prefix="/api/v1")
 
     return app
 
