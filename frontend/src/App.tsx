@@ -88,7 +88,7 @@ function App() {
             }}
           >
             {/^\/workouts\//.test(path) ? (
-              <WorkoutPage isDarkMode={isDarkMode} />
+              <WorkoutPage key={path} isDarkMode={isDarkMode} />
             ) : (
               <ChatInterface isDarkMode={isDarkMode} resetTrigger={resetTrigger} />
             )}

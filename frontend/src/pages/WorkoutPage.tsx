@@ -105,7 +105,6 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
               const [y, m, d] = targetIso.split('-');
               if (y && m && d) {
                 window.location.hash = `#/workouts/${y}/${m}/${d}`;
-                window.location.reload();
               }
             }}
             className={`px-3 py-2 rounded-md ${isDarkMode ? 'bg-brand-600 hover:bg-brand-700 text-white' : 'bg-brand-600 hover:bg-brand-700 text-white'}`}
@@ -136,7 +135,6 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
                 const [y, m, d] = iso.split('-');
                 if (y && m && d) {
                   window.location.hash = `#/workouts/${y}/${m}/${d}`;
-                  window.location.reload();
                 }
               }}
               className={`px-2 py-1 rounded-md ring-1 ring-inset text-sm ${isDarkMode ? 'bg-white/5 text-gray-100 ring-white/10' : 'bg-white text-gray-900 ring-slate-300'}`}
