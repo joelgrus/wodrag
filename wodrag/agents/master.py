@@ -62,8 +62,11 @@ class MasterAgent(dspy.Module):
                             date_iso = w.date.isoformat()
                         else:
                             date_iso = str(w.date)
-                        y, m, d = [str(part).zfill(2) for part in date_iso.split("-")]
-                        link = f"[{name} ({y}-{m}-{d})](#/workouts/{y}/{m}/{d})"
+                        parts = date_iso.split("-")
+                        year = parts[0]
+                        month = parts[1].zfill(2)
+                        day = parts[2].zfill(2)
+                        link = f"[{name} ({year}-{month}-{day})](#/workouts/{year}/{month}/{day})"
                     except Exception:
                         # Fallback to plain text if parsing fails
                         link = f"{name} ({w.date})"
@@ -93,8 +96,11 @@ class MasterAgent(dspy.Module):
                             date_iso = w.date.isoformat()
                         else:
                             date_iso = str(w.date)
-                        y, m, d = [str(part).zfill(2) for part in date_iso.split("-")]
-                        link = f"[{name} ({y}-{m}-{d})](#/workouts/{y}/{m}/{d})"
+                        parts = date_iso.split("-")
+                        year = parts[0]
+                        month = parts[1].zfill(2)
+                        day = parts[2].zfill(2)
+                        link = f"[{name} ({year}-{month}-{day})](#/workouts/{year}/{month}/{day})"
                     except Exception:
                         link = f"{name} ({w.date})"
                 output.append(f"- {link}: {summary}")
@@ -114,6 +120,24 @@ class MasterAgent(dspy.Module):
                 return "No workout found for that date."
 
             lines: list[str] = []
+            
+            # Add link to workout page
+            if wk.date:
+                try:
+                    if hasattr(wk.date, "isoformat"):
+                        date_iso = wk.date.isoformat()
+                    else:
+                        date_iso = str(wk.date)
+                    parts = date_iso.split("-")
+                    year = parts[0]
+                    month = parts[1].zfill(2)
+                    day = parts[2].zfill(2)
+                    workout_link = f"[View full workout page](#/workouts/{year}/{month}/{day})"
+                    lines.append(workout_link)
+                    lines.append("")  # Empty line for spacing
+                except Exception:
+                    pass
+            
             if wk.workout_name:
                 lines.append(f"Name: {wk.workout_name}")
             if wk.date:
@@ -131,6 +155,24 @@ class MasterAgent(dspy.Module):
                 return "No workout found for that id."
 
             lines: list[str] = []
+            
+            # Add link to workout page
+            if wk.date:
+                try:
+                    if hasattr(wk.date, "isoformat"):
+                        date_iso = wk.date.isoformat()
+                    else:
+                        date_iso = str(wk.date)
+                    parts = date_iso.split("-")
+                    year = parts[0]
+                    month = parts[1].zfill(2)
+                    day = parts[2].zfill(2)
+                    workout_link = f"[View full workout page](#/workouts/{year}/{month}/{day})"
+                    lines.append(workout_link)
+                    lines.append("")  # Empty line for spacing
+                except Exception:
+                    pass
+            
             if wk.workout_name:
                 lines.append(f"Name: {wk.workout_name}")
             if wk.date:
