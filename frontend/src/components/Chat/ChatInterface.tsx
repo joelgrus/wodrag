@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
 import MessageInput from './MessageInput';
 import LoadingIndicator from './LoadingIndicator';
+import Credits from '../Credits/Credits';
 import { ChatMessage, ChatState } from '../../types/api';
 import { apiService } from '../../services/api';
 
@@ -196,6 +197,14 @@ What would you like to research?`,
         )}
         <div ref={messagesEndRef} />
       </div>
+      
+      {/* Credits */}
+      <Credits 
+        isDarkMode={isDarkMode} 
+        className={`py-4 px-6 border-t theme-transition ${
+          isDarkMode ? 'border-white/10' : 'border-slate-200'
+        }`} 
+      />
       
       {/* Message Input */}
       <MessageInput

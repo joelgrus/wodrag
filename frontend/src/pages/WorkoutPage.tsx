@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { apiService } from '../services/api';
 import { ApiResponse } from '../types/api';
 import { WorkoutWithSimilar, Workout, SearchResultModel } from '../types/workout';
+import Credits from '../components/Credits/Credits';
 
 interface WorkoutPageProps {
   isDarkMode: boolean;
@@ -215,6 +216,9 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
           </ul>
         </SectionCard>
       </div>
+      
+      {/* Credits */}
+      <Credits isDarkMode={isDarkMode} className="mt-8 pb-6" />
     </div>
   );
 };
