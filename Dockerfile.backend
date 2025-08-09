@@ -28,6 +28,9 @@ RUN uv pip install --system -e .
 # Expose port
 EXPOSE 8000
 
+# Create log directory for rotating logs
+RUN mkdir -p /var/log/wodrag
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/api/v1/health')" || exit 1

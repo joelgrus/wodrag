@@ -11,10 +11,9 @@ client = TestClient(app)
 def test_agent_query_validation_empty():
     """Test agent query validation with empty question."""
     response = client.post(
-        "/api/v1/agent/query",
-        json={"question": "", "verbose": False}
+        "/api/v1/agent/query", json={"question": "", "verbose": False}
     )
-    
+
     assert response.status_code == 422  # FastAPI uses 422 for validation errors
     data = response.json()
     assert "detail" in data
@@ -22,10 +21,7 @@ def test_agent_query_validation_empty():
 
 def test_agent_query_validation_missing_field():
     """Test agent query validation with missing question field."""
-    response = client.post(
-        "/api/v1/agent/query",
-        json={"verbose": True}
-    )
+    response = client.post("/api/v1/agent/query", json={"verbose": True})
     assert response.status_code == 422  # FastAPI uses 422 for validation errors
 
 
@@ -34,7 +30,7 @@ def test_agent_query_invalid_json():
     response = client.post(
         "/api/v1/agent/query",
         content="invalid json",
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json"},
     )
     assert response.status_code == 422  # FastAPI uses 422 for validation errors
 

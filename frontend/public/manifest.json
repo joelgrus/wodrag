@@ -1,7 +1,7 @@
 {
   "short_name": "WoDrag",
-  "name": "WoDrag - CrossFit AI Coach",
-  "description": "AI-powered CrossFit workout search and coaching",
+  "name": "WoDrag - CrossFit Research Assistant",
+  "description": "AI-powered CrossFit workout research and analysis",
   "icons": [
     {
       "src": "favicon.ico",

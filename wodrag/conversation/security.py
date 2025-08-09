@@ -4,6 +4,7 @@ import html
 import re
 import secrets
 from re import Pattern
+from typing import Protocol
 
 
 class MessageSanitizer:
@@ -111,7 +112,12 @@ class SecureIdGenerator:
 class RateLimiter:
     """Simple in-memory rate limiter for conversation operations."""
 
-    def __init__(self, max_requests: int = 100, window_seconds: int = 3600, max_identifiers: int = 10000):
+    def __init__(
+        self,
+        max_requests: int = 100,
+        window_seconds: int = 3600,
+        max_identifiers: int = 10000,
+    ):
         """
         Initialize rate limiter.
 
@@ -140,30 +146,34 @@ class RateLimiter:
         current_time = time.time()
         window_start = current_time - self.window_seconds
 
-        # Get or create request history for this identifier
-        if identifier not in self._requests:
-            self._requests[identifier] = []
-
-        requests = self._requests[identifier]
+        # Get existing request history (do not create yet)
+        existing_requests = self._requests.get(identifier, [])
 
         # Remove old requests outside the window
-        self._requests[identifier] = [
-            req_time for req_time in requests if req_time > window_start
+        recent_requests = [
+            req_time for req_time in existing_requests if req_time > window_start
         ]
 
         # Check if under limit
-        if len(self._requests[identifier]) >= self.max_requests:
+        if len(recent_requests) >= self.max_requests:
             return False
 
-        # Check if we're tracking too many identifiers
-        if len(self._requests) >= self.max_identifiers and identifier not in self._requests:
-            # Remove the oldest identifier (simple LRU-like eviction)
-            oldest_identifier = min(self._requests.keys(), 
-                                  key=lambda k: min(self._requests[k]) if self._requests[k] else 0)
+        # If this is a new identifier and we're at capacity, evict oldest
+        if (
+            identifier not in self._requests
+            and len(self._requests) >= self.max_identifiers
+        ):
+            # Remove the oldest identifier
+            # (simple LRU-like eviction by oldest timestamp)
+            oldest_identifier = min(
+                self._requests.keys(),
+                key=lambda k: min(self._requests[k]) if self._requests[k] else 0,
+            )
             del self._requests[oldest_identifier]
 
         # Record this request
-        self._requests[identifier].append(current_time)
+        recent_requests.append(current_time)
+        self._requests[identifier] = recent_requests
         return True
 
     def cleanup_old_entries(self) -> None:
@@ -191,3 +201,21 @@ class RateLimiter:
             del self._requests[identifier]
 
 
+class NoopRateLimiter:
+    """Rate limiter that always allows requests (used to avoid double counting)."""
+
+    def is_allowed(self, identifier: str) -> bool:  # noqa: ARG002 - keep signature
+        return True
+
+    def cleanup_old_entries(self) -> None:
+        return
+
+
+class RateLimiterProtocol(Protocol):
+    """Protocol for rate limiters used by conversation services."""
+
+    def is_allowed(self, identifier: str) -> bool:
+        ...
+
+    def cleanup_old_entries(self) -> None:  # pragma: no cover - trivial
+        ...

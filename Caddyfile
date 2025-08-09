@@ -1,0 +1,64 @@
+# Caddy configuration for wodrag.com
+
+{
+  # Optional global options
+  email admin@wodrag.com
+}
+
+wodrag.com, www.wodrag.com {
+  encode zstd gzip
+
+  # Serve the React build directly from container filesystem
+  root * /usr/share/caddy
+  file_server
+
+  # SPA routing: fall back to index.html
+  try_files {path} /index.html
+
+  # Proxy API to backend FastAPI service
+  handle_path /api/* {
+    reverse_proxy backend:8000 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+      header_up Host {host}
+      transport http {
+        response_header_timeout 60s
+        dial_timeout 10s
+      }
+    }
+  }
+
+  # Cache static assets aggressively
+  @static {
+    path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot
+  }
+  header @static Cache-Control "public, max-age=31536000, immutable"
+
+  log {
+    output file /data/log/access.log {
+      roll_size 50MB
+      roll_keep 5
+      roll_keep_for 168h
+    }
+    format console
+  }
+}
+
+# Local development (no TLS): bind to :80
+:80 {
+  encode zstd gzip
+  root * /usr/share/caddy
+  file_server
+  try_files {path} /index.html
+
+  handle_path /api/* {
+    reverse_proxy backend:8000 {
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Real-IP {remote_host}
+      header_up Host {host}
+      transport http {
+        response_header_timeout 60s
+      }
+    }
+  }
+}

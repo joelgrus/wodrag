@@ -71,6 +71,30 @@ docker compose -f docker-compose.prod.yml logs -f
 
 Open your browser to: **http://localhost** (or your VPS IP)
 
+## Caddy Frontend (Production)
+
+The production stack serves the frontend with Caddy and proxies API requests to the backend.
+
+- Domain: configure DNS for `wodrag.com` and `www.wodrag.com` to point to your host.
+- TLS: Caddy automatically provisions certificates via Let's Encrypt on ports 80/443.
+- Build: `Dockerfile.caddy` builds the React app and serves it using the repo `Caddyfile`.
+
+Start services:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d postgres
+docker compose -f docker-compose.prod.yml up -d backend
+docker compose -f docker-compose.prod.yml up -d frontend
+```
+
+Backend rate limits to review:
+
+- `GLOBAL_RATE_LIMIT_REQUESTS_PER_DAY` (global request budget)
+- `RATE_LIMIT_REQUESTS_PER_HOUR` (per-client requests/hour)
+- `PER_REQUEST_LM_CALL_BUDGET` (LLM calls per request, default 6)
+
+Per-client identification uses `X-Forwarded-For`/`X-Real-IP` set by Caddy.
+
 ## Services
 
 The stack includes:

@@ -19,16 +19,13 @@ class TestPostgreSQLClient:
         with get_postgres_connection() as conn:
             assert conn == mock_conn
 
-        mock_connect.assert_called_once_with(
-            "postgresql://user:pass@localhost:5432/db"
-        )
+        mock_connect.assert_called_once_with("postgresql://user:pass@localhost:5432/db")
         mock_conn.close.assert_called_once()
 
     @patch.dict(os.environ, {}, clear=True)
     def test_get_postgres_connection_missing_url(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
-            with get_postgres_connection():
-                pass
+        with pytest.raises(ValueError) as exc_info, get_postgres_connection():
+            pass
 
         assert "DATABASE_URL not found in environment" in str(exc_info.value)
 
@@ -43,9 +40,8 @@ class TestPostgreSQLClient:
         mock_conn = MagicMock()
         mock_connect.return_value = mock_conn
 
-        with pytest.raises(RuntimeError):
-            with get_postgres_connection() as conn:
-                assert conn == mock_conn
-                raise RuntimeError("Test exception")
+        with pytest.raises(RuntimeError), get_postgres_connection() as conn:
+            assert conn == mock_conn
+            raise RuntimeError("Test exception")
 
         mock_conn.close.assert_called_once()

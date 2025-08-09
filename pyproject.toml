@@ -58,6 +58,10 @@ strict_equality = true
 [tool.ruff]
 target-version = "py311"
 line-length = 88
+exclude = [
+    "scripts/*",
+    "debug_*.py",
+]
 
 [tool.ruff.lint]
 select = [

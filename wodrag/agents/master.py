@@ -2,7 +2,7 @@
 
 from typing import Any
 
-import dspy
+import dspy  # type: ignore
 
 from wodrag.agents.text_to_sql import QueryGenerator
 from wodrag.agents.workout_generator import WorkoutSearchGenerator
@@ -11,7 +11,14 @@ from wodrag.database.workout_repository import WorkoutRepository
 
 
 class MasterAgent(dspy.Module):
-    """Master agent for workout queries using DSPy ReAct."""
+    """
+    Answer the user's question using your workout knowledge and tools.
+    If the user asks for details about a specific workout (by date or id),
+    fetch and return the full workout details (workout + scaling + name),
+    not the one_sentence_summary. Use the detail tools for precise info.
+    Feel free to use markdown formatting in your responses if that will
+    make things clearer.
+    """
 
     def __init__(
         self,
@@ -21,6 +28,8 @@ class MasterAgent(dspy.Module):
         workout_generator: WorkoutSearchGenerator,
     ):
         super().__init__()
+        import logging
+        logging.info("MasterAgent initialized")
 
         # Store injected dependencies
         self.workout_repo = workout_repo
@@ -31,39 +40,106 @@ class MasterAgent(dspy.Module):
         # Create tool functions that use the injected services
         def very_keyword_search(query: str) -> str:
             """Search for specific workout names, movements, or exact keywords."""
-            results = self.workout_repo.hybrid_search(query_text=query, semantic_weight=0.1, limit=10)
+            results = self.workout_repo.hybrid_search(
+                query_text=query, semantic_weight=0.1, limit=10
+            )
 
             if not results:
                 return "No workouts found."
 
             output = []
-            for i, result in enumerate(results, 1):
+            for _i, result in enumerate(results, 1):
                 w = result.workout
                 summary = w.one_sentence_summary or (
                     w.workout[:100] if w.workout else ""
                 )
-                output.append(
-                    f"{i}. {w.workout_name or 'Workout'} ({w.date}): {summary}"
-                )
+                name = w.workout_name or "Workout"
+                link = name
+                if w.date:
+                    try:
+                        # Support both date objects and ISO strings
+                        if hasattr(w.date, "isoformat"):
+                            date_iso = w.date.isoformat()
+                        else:
+                            date_iso = str(w.date)
+                        y, m, d = [str(part).zfill(2) for part in date_iso.split("-")]
+                        link = f"[{name} ({y}-{m}-{d})](#/workouts/{y}/{m}/{d})"
+                    except Exception:
+                        # Fallback to plain text if parsing fails
+                        link = f"{name} ({w.date})"
+                output.append(f"- {link}: {summary}")
             return "\n".join(output)
 
         def very_semantic_search(query: str) -> str:
             """Search for workouts by meaning, concept, or similarity."""
-            results = self.workout_repo.hybrid_search(query_text=query, semantic_weight=0.9, limit=10)
+            results = self.workout_repo.hybrid_search(
+                query_text=query, semantic_weight=0.9, limit=10
+            )
 
             if not results:
                 return "No workouts found."
 
             output = []
-            for i, result in enumerate(results, 1):
+            for _i, result in enumerate(results, 1):
                 w = result.workout
                 summary = w.one_sentence_summary or (
                     w.workout[:100] if w.workout else ""
                 )
-                output.append(
-                    f"{i}. {w.workout_name or 'Workout'} ({w.date}): {summary}"
-                )
+                name = w.workout_name or "Workout"
+                link = name
+                if w.date:
+                    try:
+                        if hasattr(w.date, "isoformat"):
+                            date_iso = w.date.isoformat()
+                        else:
+                            date_iso = str(w.date)
+                        y, m, d = [str(part).zfill(2) for part in date_iso.split("-")]
+                        link = f"[{name} ({y}-{m}-{d})](#/workouts/{y}/{m}/{d})"
+                    except Exception:
+                        link = f"{name} ({w.date})"
+                output.append(f"- {link}: {summary}")
             return "\n".join(output)
+
+        def details_by_date(date_str: str) -> str:
+            """Get full workout details by date (YYYY-MM-DD)."""
+            try:
+                from datetime import date
+
+                y, m, d = [int(x) for x in str(date_str).split("-")]
+                wk = self.workout_repo.get_workout_by_date(date(y, m, d))
+            except Exception:
+                wk = None
+
+            if not wk:
+                return "No workout found for that date."
+
+            lines: list[str] = []
+            if wk.workout_name:
+                lines.append(f"Name: {wk.workout_name}")
+            if wk.date:
+                lines.append(f"Date: {wk.date}")
+            if wk.workout:
+                lines.append(f"Workout:\n{wk.workout}")
+            if wk.scaling:
+                lines.append(f"\nScaling:\n{wk.scaling}")
+            return "\n".join(lines) if lines else "No details available."
+
+        def details_by_id(workout_id: int) -> str:
+            """Get full workout details by id."""
+            wk = self.workout_repo.get_workout(workout_id)
+            if not wk:
+                return "No workout found for that id."
+
+            lines: list[str] = []
+            if wk.workout_name:
+                lines.append(f"Name: {wk.workout_name}")
+            if wk.date:
+                lines.append(f"Date: {wk.date}")
+            if wk.workout:
+                lines.append(f"Workout:\n{wk.workout}")
+            if wk.scaling:
+                lines.append(f"\nScaling:\n{wk.scaling}")
+            return "\n".join(lines) if lines else "No details available."
 
         def query_database(question: str) -> str:
             """Answer questions about workouts using SQL."""
@@ -104,7 +180,7 @@ class MasterAgent(dspy.Module):
                 func=very_keyword_search,
             ),
             dspy.Tool(
-                name="very_semantic_search", 
+                name="very_semantic_search",
                 desc=(
                     "Search for workouts by meaning, concept, or similarity. "
                     "Use this for queries like 'find workouts similar to Murph', "
@@ -112,6 +188,22 @@ class MasterAgent(dspy.Module):
                     "Emphasizes conceptual understanding."
                 ),
                 func=very_semantic_search,
+            ),
+            dspy.Tool(
+                name="get_details_by_date",
+                desc=(
+                    "Get full workout details by date. Input: YYYY-MM-DD. "
+                    "Returns full workout text and scaling if available."
+                ),
+                func=details_by_date,
+            ),
+            dspy.Tool(
+                name="get_details_by_id",
+                desc=(
+                    "Get full workout details by id. Input: integer id. "
+                    "Returns full workout text and scaling if available."
+                ),
+                func=details_by_id,
             ),
             dspy.Tool(
                 name="query",
@@ -132,9 +224,56 @@ class MasterAgent(dspy.Module):
 
         # Use DSPy's ReAct with verbose output
         # We'll create a custom signature that can handle conversation context
+        logging.info(f"Creating ReAct with {len(self.tools)} tools")
+
+        class QA(dspy.Signature):
+            """Answer the question.
+            
+            Rules:
+            - Never pass any arguments to the tool named 'finish'. Call it with {} only.
+            """
+            question: str = dspy.InputField()
+            answer: str = dspy.OutputField()
+
+ 
         self.react = dspy.ReAct(
-            signature="question -> answer", tools=self.tools, max_iters=5
+            signature=QA, tools=self.tools, max_iters=5
         )
+
+        logging.info("ReAct created successfully")
+
+    def _format_workout_details(self, wk: Any) -> str:
+        lines: list[str] = []
+        if getattr(wk, "workout_name", None):
+            lines.append(f"Name: {wk.workout_name}")
+        if getattr(wk, "date", None):
+            lines.append(f"Date: {wk.date}")
+        if getattr(wk, "workout", None):
+            lines.append(f"Workout:\n{wk.workout}")
+        if getattr(wk, "scaling", None):
+            lines.append(f"\nScaling:\n{wk.scaling}")
+        return "\n".join(lines) if lines else "No details available."
+
+    def _details_by_date_str(self, date_str: str) -> str:
+        try:
+            from datetime import date as _date
+
+            y, m, d = [int(x) for x in str(date_str).split("-")]
+            wk = self.workout_repo.get_workout_by_date(_date(y, m, d))
+        except Exception:
+            wk = None
+        if not wk:
+            return "No workout found for that date."
+        return self._format_workout_details(wk)
+
+    def _details_by_id_int(self, workout_id: int) -> str:
+        try:
+            wk = self.workout_repo.get_workout(workout_id)
+        except Exception:
+            wk = None
+        if not wk:
+            return "No workout found for that id."
+        return self._format_workout_details(wk)
 
     def forward(
         self,
@@ -160,6 +299,9 @@ Current question: {question}"""
                 result = self.react(question=enhanced_question)
         else:
             result = self.react(question=enhanced_question)
+
+        print(dspy.inspect_history(n=5))
+
         return str(result.answer)
 
     def _format_conversation_context(self, context: list[dict[str, str]]) -> str:
@@ -191,6 +333,15 @@ Current question: {question}"""
 Current question: {question}"""
         else:
             enhanced_question = question
+
+        enhanced_question = (
+            enhanced_question
+            + "\n\nFormatting requirements for lists:" \
+            + " When you call very_keyword_search or very_semantic_search," \
+            + " paste the tool's returned lines verbatim as your final answer." \
+            + " The tool output already contains Markdown links to workout details." \
+            + " Do not paraphrase or remove links; keep the bullets as-is."
+        )
 
         # Create wrapper function for tools
         def wrap_tool(tool: Any) -> Any:

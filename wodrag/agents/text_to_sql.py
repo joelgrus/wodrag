@@ -15,6 +15,8 @@ class TextToSQL(dspy.Signature):
     sql_query: str = dspy.OutputField(
         description="""DuckDB SQL query that answers the natural language query.
         IMPORTANT: Use 'pg_db.workouts' as the table name (not just 'workouts').
+        IMPORTANT: If the user asks for information about a specific workout,
+        return the workout field not the one_sentence_summary field.
         IMPORTANT: For array columns (movements, equipment), use PostgreSQL
         array syntax:
         - Use 'movement' = ANY(movements) not movements LIKE '%movement%'

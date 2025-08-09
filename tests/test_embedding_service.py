@@ -37,7 +37,9 @@ class TestEmbeddingService:
         mock_embedding = [0.1, 0.2, 0.3, 0.4]
         mock_client = MagicMock()
         mock_openai.return_value = mock_client
-        mock_client.embeddings.create.return_value.data = [MagicMock(embedding=mock_embedding)]
+        mock_client.embeddings.create.return_value.data = [
+            MagicMock(embedding=mock_embedding)
+        ]
 
         service = EmbeddingService()
         result = service.generate_embedding("test text")
@@ -56,7 +58,9 @@ class TestEmbeddingService:
         mock_embedding = [0.1, 0.2, 0.3]
         mock_client = MagicMock()
         mock_openai.return_value = mock_client
-        mock_client.embeddings.create.return_value.data = [MagicMock(embedding=mock_embedding)]
+        mock_client.embeddings.create.return_value.data = [
+            MagicMock(embedding=mock_embedding)
+        ]
 
         service = EmbeddingService()
         service.generate_embedding("  test text  ")

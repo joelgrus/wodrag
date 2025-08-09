@@ -142,5 +142,3 @@ class InMemoryConversationStore(ConversationStore):
     def _is_expired(self, conversation: Conversation) -> bool:
         """Check if a conversation has expired."""
         return datetime.now(UTC) - conversation.last_updated > self.conversation_ttl
-
-

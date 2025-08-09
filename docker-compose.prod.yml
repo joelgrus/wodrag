@@ -29,7 +29,7 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       WODRAG_API_HOST: 0.0.0.0
       WODRAG_API_PORT: 8000
-      WODRAG_API_CORS_ORIGINS: '["http://localhost","http://localhost:80"]'
+      WODRAG_API_CORS_ORIGINS: '["https://wodrag.com","https://www.wodrag.com","http://localhost","http://localhost:80"]'
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,10 +40,11 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
+      dockerfile: Dockerfile.caddy
     container_name: wodrag_frontend
     ports:
       - "80:80"
+      - "443:443"
     depends_on:
       - backend
     networks:

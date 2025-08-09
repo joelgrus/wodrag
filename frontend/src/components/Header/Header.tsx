@@ -28,7 +28,7 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, onToggleTheme, onNewChat })
             <div>
               <div className="text-sm uppercase tracking-wider font-semibold text-brand-600">Wodrag</div>
               <h1 className="leading-tight font-semibold text-base sm:text-lg">
-                CrossFit AI Coach
+                CrossFit Research Assistant
               </h1>
             </div>
           </div>

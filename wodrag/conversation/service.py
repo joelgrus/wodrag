@@ -1,8 +1,11 @@
 """Conversation management service."""
 
-
 from .models import Conversation, ConversationValidationError
-from .security import MessageSanitizer, RateLimiter, SecureIdGenerator
+from .security import (
+    MessageSanitizer,
+    RateLimiterProtocol,
+    SecureIdGenerator,
+)
 from .storage import ConversationStore
 
 
@@ -10,7 +13,7 @@ class ConversationService:
     """Service for managing conversations and their context."""
 
     def __init__(
-        self, store: ConversationStore, rate_limiter: RateLimiter
+        self, store: ConversationStore, rate_limiter: RateLimiterProtocol
     ) -> None:
         """Initialize conversation service with explicit dependencies.
 
@@ -40,7 +43,9 @@ class ConversationService:
         # Check rate limiting
         if not self.rate_limiter.is_allowed(client_identifier):
             raise ConversationValidationError(
-                "Rate limit exceeded. Please wait before creating more conversations."
+                "You're sending requests too quickly. Please wait a few "
+                "minutes before trying again — this helps keep the service "
+                "running smoothly for everyone."
             )
 
         if conversation_id:
@@ -83,7 +88,9 @@ class ConversationService:
         # Check rate limiting
         if not self.rate_limiter.is_allowed(client_identifier):
             raise ConversationValidationError(
-                "Rate limit exceeded. Please wait before sending more messages."
+                "You're sending requests too quickly. Please wait a few "
+                "minutes before trying again — this helps keep the service "
+                "running smoothly for everyone."
             )
 
         # Sanitize message content
@@ -170,5 +177,3 @@ class ConversationService:
     def cleanup_expired_conversations(self) -> int:
         """Remove expired conversations."""
         return self.store.cleanup_expired()
-
-

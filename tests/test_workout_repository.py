@@ -9,7 +9,9 @@ from wodrag.database.workout_repository import WorkoutRepository
 
 # Skip all tests in this file since WorkoutRepository now uses PostgreSQL directly
 # and these tests were written for Supabase - need to rewrite for PostgreSQL
-pytestmark = pytest.mark.skip(reason="WorkoutRepository tests need rewriting for PostgreSQL, skipping for now")
+pytestmark = pytest.mark.skip(
+    reason="WorkoutRepository tests need rewriting for PostgreSQL, skipping for now"
+)
 
 
 @pytest.fixture

@@ -51,7 +51,7 @@ const MessageInput = forwardRef<{ focus: () => void }, MessageInputProps>(({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Ask about CrossFit workouts, movements, or training..."
+            placeholder="Research CrossFit workouts, movements, and training data..."
             disabled={disabled}
             className={`w-full px-2 py-2 rounded-md resize-none focus:outline-none text-sm theme-transition ${
               isDarkMode

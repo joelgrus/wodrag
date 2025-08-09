@@ -1,0 +1,28 @@
+# Frontend Dockerfile using Caddy
+# Stage 1: Build React app
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: Serve with Caddy
+FROM caddy:alpine
+
+WORKDIR /srv
+
+# Copy Caddyfile
+COPY Caddyfile /etc/caddy/Caddyfile
+
+# Copy built frontend
+COPY --from=builder /app/build /usr/share/caddy
+
+EXPOSE 80 443
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost/ || exit 1
+

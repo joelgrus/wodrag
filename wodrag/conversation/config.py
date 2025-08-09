@@ -18,6 +18,8 @@ class ConversationConfig:
 
     # Rate limiting
     rate_limit_requests_per_hour: int = 100
+    global_rate_limit_requests_per_day: int = 5000
+    per_request_lm_call_budget: int = 6
 
     @classmethod
     def from_env(cls) -> "ConversationConfig":
@@ -31,5 +33,11 @@ class ConversationConfig:
             max_context_tokens=int(os.getenv("MAX_CONTEXT_TOKENS", "8000")),
             rate_limit_requests_per_hour=int(
                 os.getenv("RATE_LIMIT_REQUESTS_PER_HOUR", "100")
+            ),
+            global_rate_limit_requests_per_day=int(
+                os.getenv("GLOBAL_RATE_LIMIT_REQUESTS_PER_DAY", "5000")
+            ),
+            per_request_lm_call_budget=int(
+                os.getenv("PER_REQUEST_LM_CALL_BUDGET", "6")
             ),
         )

@@ -1,19 +1,20 @@
 """Health check endpoints for FastAPI."""
 
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
+# Import singleton getter
+from wodrag.api.main_fastapi import get_workout_repository
 from wodrag.api.models.responses import APIResponse, HealthCheckData
 from wodrag.database.workout_repository import WorkoutRepository
 
-# Import singleton getter
-from wodrag.api.main_fastapi import get_workout_repository
-
 router = APIRouter(tags=["health"])
 
+
 @router.get("/health", response_model=APIResponse[HealthCheckData])
-async def health_check():
+async def health_check() -> Any:
     """Basic health check endpoint.
 
     Returns:
@@ -24,10 +25,11 @@ async def health_check():
     )
     return APIResponse(success=True, data=data)
 
+
 @router.get("/health/db", response_model=APIResponse[HealthCheckData])
 async def database_health(
-    workout_repo: WorkoutRepository = Depends(get_workout_repository)
-):
+    workout_repo: WorkoutRepository = Depends(get_workout_repository),  # noqa: B008
+) -> Any:
     """Check database connectivity.
 
     Args:
@@ -47,7 +49,7 @@ async def database_health(
             database="connected",
         )
         return APIResponse(success=True, data=data)
-        
+
     except Exception as e:
         data = HealthCheckData(
             status="unhealthy",
@@ -57,5 +59,5 @@ async def database_health(
         )
         raise HTTPException(
             status_code=503,
-            detail=APIResponse(success=False, data=data, error=str(e)).dict()
-        )
+            detail=APIResponse(success=False, data=data, error=str(e)).dict(),
+        ) from e

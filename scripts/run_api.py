@@ -9,6 +9,8 @@ def main() -> None:
     """Run the API server."""
     settings = get_settings()
     
+    settings.log_level = "debug"
+
     uvicorn.run(
         "wodrag.api.main_fastapi:app",
         host=settings.host,

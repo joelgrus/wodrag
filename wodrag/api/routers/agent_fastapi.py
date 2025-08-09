@@ -1,27 +1,62 @@
 """Master agent endpoint for FastAPI."""
 
 import logging
-from fastapi import APIRouter, Request, Depends, HTTPException
+from typing import Any
+
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from wodrag.agents.master import MasterAgent
+# Import singleton getters
+from wodrag.api.main_fastapi import (
+    get_conversation_service,
+    get_global_rate_limiter,
+    get_master_agent,
+    get_rate_limiter,
+)
 from wodrag.api.models.responses import AgentQueryResponse, APIResponse
 from wodrag.api.models.workouts import AgentQueryRequest
 from wodrag.conversation import ConversationValidationError
+from wodrag.conversation.security import RateLimiter
 from wodrag.conversation.service import ConversationService
 
-# Import singleton getters
-from wodrag.api.main_fastapi import get_master_agent, get_conversation_service
-
 router = APIRouter(tags=["agent"])
+
+
+def _get_client_identifier(request: Request) -> str:
+    """Derive a stable client identifier using proxy headers if present.
+
+    Preference order:
+    - X-Forwarded-For: first IP in the list
+    - X-Real-IP
+    - request.client.host
+    """
+    try:
+        # Standard proxy header, may contain comma-separated list
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            # Take the left-most (original client)
+            return xff.split(",")[0].strip()
+
+        # Some proxies set X-Real-IP
+        xri = request.headers.get("x-real-ip")
+        if xri:
+            return xri.strip()
+    except Exception:
+        # Fall through to FastAPI client if any parsing fails
+        pass
+
+    return request.client.host if request.client else "unknown"
+
 
 @router.post("/agent/query", response_model=APIResponse[AgentQueryResponse])
 async def query_agent(
     data: AgentQueryRequest,
     request: Request,
-    master_agent: MasterAgent = Depends(get_master_agent),
-    conversation_service: ConversationService = Depends(get_conversation_service),
-):
+    master_agent: Any = Depends(get_master_agent),  # noqa: B008
+    conversation_service: ConversationService = Depends(get_conversation_service),  # noqa: B008
+    global_rate_limiter: RateLimiter = Depends(get_global_rate_limiter),  # noqa: B008
+    per_client_rate_limiter: RateLimiter = Depends(get_rate_limiter),  # noqa: B008
+) -> Any:
     """Query the master agent with natural language and conversation context.
 
     Args:
@@ -34,17 +69,41 @@ async def query_agent(
         reasoning trace
     """
     try:
-        # Get client identifier for rate limiting
-        client_ip = request.client.host if request.client else "unknown"
+        # Get client identifier for rate limiting (proxy-aware)
+        client_ip = _get_client_identifier(request)
 
         # Log the incoming request
-        logging.info(f"Agent query request - Question: '{data.question[:50]}...', Conversation ID: {data.conversation_id}, Client: {client_ip}")
+        logging.info(
+            "Agent query request - Question: '%s...', Conversation ID: %s, Client: %s",
+            data.question[:50],
+            data.conversation_id,
+            client_ip,
+        )
 
-        # Get or create conversation with rate limiting
+        # Check global daily rate limit first
+        if not global_rate_limiter.is_allowed("global"):
+            raise ConversationValidationError(
+                "We've reached our daily query limit to keep costs "
+                "manageable. Please try again tomorrow (resets at "
+                "midnight UTC). Thanks for understanding!"
+            )
+
+        # Check per-client hourly limit once per interaction
+        if not per_client_rate_limiter.is_allowed(client_ip):
+            raise ConversationValidationError(
+                "You're sending requests too quickly. Please wait a bit "
+                "and try again (per-client rate limit)."
+            )
+
+        # Get or create conversation (rate limiting handled above)
         conversation = conversation_service.get_or_create_conversation(
             data.conversation_id, client_identifier=client_ip
         )
-        logging.debug(f"Retrieved conversation: {conversation.id}, Messages: {len(conversation.messages)}")
+        logging.debug(
+            "Retrieved conversation: %s, Messages: %d",
+            conversation.id,
+            len(conversation.messages),
+        )
 
         # Add user message to conversation with sanitization
         conversation_service.add_user_message(
@@ -55,15 +114,18 @@ async def query_agent(
         conversation_context = conversation_service.get_conversation_context(
             conversation.id
         )
-        logging.debug(f"Conversation context: {len(conversation_context)} messages")
+        logging.debug(
+            "Conversation context length: %d messages",
+            len(conversation_context),
+        )
 
-        logging.debug(f"Calling master agent with verbose={data.verbose}")
+        logging.debug("Calling master agent with verbose=%s", data.verbose)
         if data.verbose:
             # Get answer with reasoning trace
             answer, trace = master_agent.forward_verbose(
                 data.question, conversation_context=conversation_context
             )
-            logging.debug(f"Got verbose answer: {answer[:50]}...")
+            logging.debug("Got verbose answer: %s...", answer[:50])
             response_data = AgentQueryResponse(
                 question=data.question,
                 answer=answer,
@@ -78,7 +140,7 @@ async def query_agent(
                 conversation_context=conversation_context,
                 verbose=False,
             )
-            logging.debug(f"Got answer: {answer[:50]}...")
+            logging.debug("Got answer: %s...", answer[:50])
             response_data = AgentQueryResponse(
                 question=data.question,
                 answer=answer,
@@ -94,7 +156,7 @@ async def query_agent(
         logging.debug("Assistant message saved successfully")
 
         return APIResponse(success=True, data=response_data)
-        
+
     except ConversationValidationError as e:
         # Handle validation and security errors
         status_code = (
@@ -102,10 +164,10 @@ async def query_agent(
             if "rate limit" in str(e).lower()
             else 400  # Bad Request
         )
-        
+
         return JSONResponse(
             content=APIResponse(success=False, data=None, error=str(e)).dict(),
-            status_code=status_code
+            status_code=status_code,
         )
     except Exception as e:
         # Log the full error for debugging
@@ -113,5 +175,5 @@ async def query_agent(
 
         return JSONResponse(
             content=APIResponse(success=False, data=None, error=str(e)).dict(),
-            status_code=500
+            status_code=500,
         )

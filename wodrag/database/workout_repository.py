@@ -97,7 +97,10 @@ class WorkoutRepository:
             with self._get_pg_connection() as conn, conn.cursor() as cursor:
                 # Cast to date on both sides to be robust if column type differs
                 cursor.execute(
-                    "SELECT * FROM workouts WHERE date::date = %s::date ORDER BY id LIMIT 1",
+                    (
+                        "SELECT * FROM workouts WHERE date::date = %s::date "
+                        "ORDER BY id LIMIT 1"
+                    ),
                     (workout_date,),
                 )
                 row = cursor.fetchone()
@@ -132,9 +135,15 @@ class WorkoutRepository:
         """
         try:
             with self._get_pg_connection() as conn, conn.cursor() as cursor:
-                col = "summary_embedding" if embedding != "workout" else "workout_embedding"
+                col = (
+                    "summary_embedding"
+                    if embedding != "workout"
+                    else "workout_embedding"
+                )
                 # Ensure the anchor has an embedding
-                cursor.execute(f"SELECT {col} FROM workouts WHERE id = %s", (workout_id,))
+                cursor.execute(
+                    f"SELECT {col} FROM workouts WHERE id = %s", (workout_id,)
+                )
                 anchor = cursor.fetchone()
                 if not anchor or anchor[0] is None:
                     return []
@@ -143,7 +152,9 @@ class WorkoutRepository:
                 sql = f"""
                     SELECT w.*, 1 - (w.{col} <=> anchor.emb) as similarity
                     FROM workouts w
-                    CROSS JOIN (SELECT {col} AS emb FROM workouts WHERE id = %s) AS anchor
+                    CROSS JOIN (
+                        SELECT {col} AS emb FROM workouts WHERE id = %s
+                    ) AS anchor
                     WHERE w.{col} IS NOT NULL AND w.id <> %s
                     ORDER BY w.{col} <=> anchor.emb
                     LIMIT %s

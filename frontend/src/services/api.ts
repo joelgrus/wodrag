@@ -39,14 +39,25 @@ export class ApiService {
     try {
       const response = await fetch(url, defaultOptions);
       
+      // Always try to parse the response body, even for error statuses
+      const responseData = await response.json();
+      
       if (!response.ok) {
+        // Check if the backend sent an error message in the expected format
+        if (responseData && responseData.error) {
+          return {
+            success: false,
+            data: null,
+            error: responseData.error,
+          };
+        }
+        
+        // Fallback to generic error if no message provided
         throw new ApiError(
           `HTTP error! status: ${response.status}`,
           response.status
         );
       }
-
-      const responseData = await response.json();
       
       // Backend returns data in ApiResponse format already
       // So we can return it directly
