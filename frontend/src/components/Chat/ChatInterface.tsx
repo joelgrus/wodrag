@@ -198,20 +198,20 @@ What would you like to research?`,
         <div ref={messagesEndRef} />
       </div>
       
-      {/* Credits */}
-      <Credits 
-        isDarkMode={isDarkMode} 
-        className={`py-4 px-6 border-t theme-transition ${
-          isDarkMode ? 'border-white/10' : 'border-slate-200'
-        }`} 
-      />
-      
       {/* Message Input */}
       <MessageInput
         ref={inputRef}
         onSendMessage={handleSendMessage}
         disabled={chatState.isLoading}
         isDarkMode={isDarkMode}
+      />
+      
+      {/* Credits */}
+      <Credits 
+        isDarkMode={isDarkMode} 
+        className={`py-4 px-6 border-t theme-transition ${
+          isDarkMode ? 'border-white/10' : 'border-slate-200'
+        }`} 
       />
     </div>
   );
