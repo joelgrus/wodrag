@@ -39,8 +39,9 @@ async def database_health(
         APIResponse with database health status
     """
     try:
-        # Try to perform a simple database operation
-        workout_repo.search_summaries("test", limit=1)
+        # Try to perform a simple database connectivity check
+        # Use list_workouts with limit 1 to avoid embedding generation
+        workout_repo.list_workouts(page=1, page_size=1)
 
         data = HealthCheckData(
             status="healthy",

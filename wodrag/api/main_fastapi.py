@@ -2,10 +2,12 @@
 
 import logging
 import os
+from functools import lru_cache
+import threading
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from wodrag.api.config import get_settings
@@ -18,16 +20,10 @@ from wodrag.database.duckdb_client import DuckDBQueryService
 from wodrag.database.workout_repository import WorkoutRepository
 from wodrag.services.embedding_service import EmbeddingService
 
-# Global singleton instances - simple and clear!
-_conversation_config: ConversationConfig | None = None
-_conversation_store: InMemoryConversationStore | None = None
-_rate_limiter: RateLimiter | None = None
-_global_rate_limiter: RateLimiter | None = None
-_conversation_service: ConversationService | None = None
-_embedding_service: EmbeddingService | None = None
-_workout_repository: WorkoutRepository | None = None
-_master_agent: Any | None = None
+# Application configuration
 _logging_configured: bool = False
+_singletons: dict[str, Any] = {}
+_singleton_lock = threading.Lock()
 
 
 def configure_logging() -> None:
@@ -66,119 +62,124 @@ def configure_logging() -> None:
     _logging_configured = True
 
 
+@lru_cache(maxsize=1)
 def get_conversation_config() -> ConversationConfig:
-    """Get singleton conversation config."""
-    global _conversation_config
-    if _conversation_config is None:
-        _conversation_config = ConversationConfig.from_env()
-    return _conversation_config
+    """Get conversation config from environment (cached singleton)."""
+    return ConversationConfig.from_env()
 
 
-def get_conversation_store() -> InMemoryConversationStore:
-    """Get singleton conversation store."""
-    global _conversation_store
-    if _conversation_store is None:
-        config = get_conversation_config()
-        _conversation_store = InMemoryConversationStore(
-            max_conversations=config.max_conversations,
-            max_messages_per_conversation=config.max_messages_per_conversation,
-            conversation_ttl_hours=config.conversation_ttl_hours,
-        )
-    return _conversation_store
+def get_conversation_store(
+    config: ConversationConfig = Depends(get_conversation_config)
+) -> InMemoryConversationStore:
+    """Get conversation store with configuration dependency (thread-safe singleton)."""
+    if 'conversation_store' not in _singletons:
+        with _singleton_lock:
+            if 'conversation_store' not in _singletons:
+                _singletons['conversation_store'] = InMemoryConversationStore(
+                    max_conversations=config.max_conversations,
+                    max_messages_per_conversation=config.max_messages_per_conversation,
+                    conversation_ttl_hours=config.conversation_ttl_hours,
+                )
+    return _singletons['conversation_store']
 
 
-def get_rate_limiter() -> RateLimiter:
-    """Get singleton rate limiter."""
-    global _rate_limiter
-    if _rate_limiter is None:
-        config = get_conversation_config()
-        _rate_limiter = RateLimiter(
-            max_requests=config.rate_limit_requests_per_hour, window_seconds=3600
-        )
-    return _rate_limiter
+def get_rate_limiter(
+    config: ConversationConfig = Depends(get_conversation_config)
+) -> RateLimiter:
+    """Get rate limiter with configuration dependency (thread-safe singleton)."""
+    if 'rate_limiter' not in _singletons:
+        with _singleton_lock:
+            if 'rate_limiter' not in _singletons:
+                _singletons['rate_limiter'] = RateLimiter(
+                    max_requests=config.rate_limit_requests_per_hour, window_seconds=3600
+                )
+    return _singletons['rate_limiter']
 
 
-def get_global_rate_limiter() -> RateLimiter:
-    """Get singleton global rate limiter."""
-    global _global_rate_limiter
-    if _global_rate_limiter is None:
-        config = get_conversation_config()
-        _global_rate_limiter = RateLimiter(
-            max_requests=config.global_rate_limit_requests_per_day,
-            window_seconds=86400,  # 24 hours
-        )
-    return _global_rate_limiter
+def get_global_rate_limiter(
+    config: ConversationConfig = Depends(get_conversation_config)
+) -> RateLimiter:
+    """Get global rate limiter with configuration dependency (thread-safe singleton)."""
+    if 'global_rate_limiter' not in _singletons:
+        with _singleton_lock:
+            if 'global_rate_limiter' not in _singletons:
+                _singletons['global_rate_limiter'] = RateLimiter(
+                    max_requests=config.global_rate_limit_requests_per_day,
+                    window_seconds=86400,  # 24 hours
+                )
+    return _singletons['global_rate_limiter']
 
 
-def get_conversation_service() -> ConversationService:
-    """Get singleton conversation service."""
-    global _conversation_service
-    if _conversation_service is None:
-        store = get_conversation_store()
-        # Use NoopRateLimiter here to avoid double-counting; per-client checks
-        # are performed at the API router layer.
-        _conversation_service = ConversationService(
-            store=store, rate_limiter=NoopRateLimiter()
-        )
-    return _conversation_service
+def get_conversation_service(
+    store: InMemoryConversationStore = Depends(get_conversation_store)
+) -> ConversationService:
+    """Get conversation service with store dependency (thread-safe singleton)."""
+    if 'conversation_service' not in _singletons:
+        with _singleton_lock:
+            if 'conversation_service' not in _singletons:
+                # Use NoopRateLimiter here to avoid double-counting; per-client checks
+                # are performed at the API router layer.
+                _singletons['conversation_service'] = ConversationService(
+                    store=store, rate_limiter=NoopRateLimiter()
+                )
+    return _singletons['conversation_service']
 
 
 def get_embedding_service() -> EmbeddingService:
-    """Get singleton embedding service."""
-    global _embedding_service
-    if _embedding_service is None:
-        _embedding_service = EmbeddingService()
-    return _embedding_service
+    """Get embedding service."""
+    return EmbeddingService()
 
 
-def get_workout_repository() -> WorkoutRepository:
-    """Get singleton workout repository."""
-    global _workout_repository
-    if _workout_repository is None:
-        embedding_service = get_embedding_service()
-        _workout_repository = WorkoutRepository(embedding_service)
-    return _workout_repository
+def get_workout_repository(
+    embedding_service: EmbeddingService = Depends(get_embedding_service)
+) -> WorkoutRepository:
+    """Get workout repository with embedding service dependency."""
+    return WorkoutRepository(embedding_service)
 
 
-def get_master_agent() -> Any:
-    """Get singleton master agent."""
-    global _master_agent
-    if _master_agent is None:
-        # Import DSPy-dependent modules lazily to avoid side effects during app import
-        import dspy  # type: ignore[import-untyped]
+def create_workout_repository() -> WorkoutRepository:
+    """Create workout repository directly (for non-FastAPI use)."""
+    embedding_service = get_embedding_service()
+    return WorkoutRepository(embedding_service)
 
-        from wodrag.agents.master import MasterAgent
-        from wodrag.agents.text_to_sql import QueryGenerator
-        from wodrag.agents.workout_generator import (
-            WorkoutSearchGenerator,
+
+def get_master_agent(
+    workout_repo: WorkoutRepository = Depends(get_workout_repository)
+) -> Any:
+    """Get master agent with workout repository dependency."""
+    # Import DSPy-dependent modules lazily to avoid side effects during app import
+    import dspy  # type: ignore[import-untyped]
+
+    from wodrag.agents.master import MasterAgent
+    from wodrag.agents.text_to_sql import QueryGenerator
+    from wodrag.agents.workout_generator import (
+        WorkoutSearchGenerator,
+    )
+
+    # Configure DSPy if not already configured
+    if not hasattr(dspy.settings, "lm") or dspy.settings.lm is None:
+        import os
+
+        # Use OpenRouter Gemini Flash Lite (cost effective and fast)
+        base_lm = dspy.LM(
+            "openrouter/google/gemini-2.5-flash-lite",
+            api_key=os.getenv("OPENROUTER_API_KEY"),
+            max_tokens=10000,
         )
+        # Wrap LM with per-request budget enforcement and configure
+        wrap_lm_for_budget(base_lm)
+        dspy.configure(lm=base_lm)
 
-        # Configure DSPy if not already configured
-        if not hasattr(dspy.settings, "lm") or dspy.settings.lm is None:
-            import os
+    query_generator = QueryGenerator()
+    duckdb_service = DuckDBQueryService()
+    workout_generator = WorkoutSearchGenerator()
 
-            # Use OpenRouter Gemini Flash Lite (cost effective and fast)
-            base_lm = dspy.LM(
-                "openrouter/google/gemini-2.5-flash-lite",
-                api_key=os.getenv("OPENROUTER_API_KEY"),
-                max_tokens=10000,
-            )
-            # Wrap LM with per-request budget enforcement and configure
-            wrap_lm_for_budget(base_lm)
-            dspy.configure(lm=base_lm)
-
-        workout_repo = get_workout_repository()
-        query_generator = QueryGenerator()
-        duckdb_service = DuckDBQueryService()
-        workout_generator = WorkoutSearchGenerator()
-
-        _master_agent = MasterAgent(
-            workout_repo=workout_repo,
-            query_generator=query_generator,
-            duckdb_service=duckdb_service,
-            workout_generator=workout_generator,
-        )
-    return _master_agent
+    return MasterAgent(
+        workout_repo=workout_repo,
+        query_generator=query_generator,
+        duckdb_service=duckdb_service,
+        workout_generator=workout_generator,
+    )
 
 
 def create_app() -> FastAPI:
