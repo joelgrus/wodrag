@@ -5,7 +5,7 @@ services:
     image: paradedb/paradedb:latest
     container_name: wodrag_paradedb
     environment:
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_DB: wodrag
       POSTGRES_USER: postgres
     ports:
