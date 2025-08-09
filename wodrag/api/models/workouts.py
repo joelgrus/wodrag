@@ -32,6 +32,29 @@ class WorkoutModel(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class WorkoutResponseModel(BaseModel):
+    """Frontend-optimized workout model without embedding vectors."""
+
+    id: int | None = None
+    date: date | str | None = None
+    url: str | None = None
+    raw_text: str | None = None
+    workout: str | None = None
+    scaling: str | None = None
+    has_video: bool = False
+    has_article: bool = False
+    month_file: str | None = None
+    created_at: str | datetime | None = None
+    movements: list[str] = Field(default_factory=list)
+    equipment: list[str] = Field(default_factory=list)
+    workout_type: str | None = None
+    workout_name: str | None = None
+    one_sentence_summary: str | None = None
+    # Note: workout_embedding and summary_embedding excluded for frontend efficiency
+
+    model_config = {"from_attributes": True}
+
+
 class WorkoutFilterModel(BaseModel):
     """Pydantic model for workout filtering parameters."""
 
@@ -48,7 +71,7 @@ class WorkoutFilterModel(BaseModel):
 class SearchResultModel(BaseModel):
     """Pydantic model for search results."""
 
-    workout: WorkoutModel
+    workout: WorkoutResponseModel  # Use frontend-optimized model
     similarity_score: float | None = None
     bm25_score: float | None = None
     hybrid_score: float | None = None
@@ -81,7 +104,7 @@ class SearchRequest(BaseModel):
 class WorkoutSearchResult(BaseModel):
     """Single workout search result with scoring information."""
 
-    workout: WorkoutModel
+    workout: WorkoutResponseModel  # Use frontend-optimized model
     score: float
     search_type: str  # "hybrid", "semantic", "text"
     rank: int

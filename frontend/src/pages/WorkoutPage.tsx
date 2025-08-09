@@ -141,12 +141,22 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
             />
           </div>
         </div>
-        {w.url ? (
-          <a href={w.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-md bg-brand-600 hover:bg-brand-700 text-white">
-            View on CrossFit.com
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 3h7m0 0v7m0-7L10 14"/></svg>
-          </a>
-        ) : null}
+{(() => {
+          // Use the stored URL if available, otherwise construct one from the date
+          let crossfitUrl = w.url;
+          if (!crossfitUrl && w.date) {
+            // CrossFit.com URLs are typically in format: https://www.crossfit.com/workout/2005/08/18
+            const [year, month, day] = w.date.split('-');
+            crossfitUrl = `https://www.crossfit.com/workout/${year}/${month}/${day}`;
+          }
+          
+          return crossfitUrl ? (
+            <a href={crossfitUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-sm px-3 py-2 rounded-md bg-brand-600 hover:bg-brand-700 text-white">
+              View on CrossFit.com
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 3h7m0 0v7m0-7L10 14"/></svg>
+            </a>
+          ) : null;
+        })()}
       </div>
 
       {/* Summary / details */}
@@ -159,13 +169,13 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
             {w.workout ? (
               <div>
                 <div className={`text-sm uppercase tracking-wide ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Workout</div>
-                <pre className={`whitespace-pre-wrap leading-relaxed ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{w.workout}</pre>
+                <div className={`whitespace-pre-wrap leading-relaxed ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{w.workout}</div>
               </div>
             ) : null}
             {w.scaling ? (
               <div>
                 <div className={`text-sm uppercase tracking-wide ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Scaling</div>
-                <pre className={`whitespace-pre-wrap leading-relaxed ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{w.scaling}</pre>
+                <div className={`whitespace-pre-wrap leading-relaxed ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{w.scaling}</div>
               </div>
             ) : null}
           </div>
@@ -174,7 +184,6 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
         <SectionCard isDarkMode={isDarkMode} className="p-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">Similar Workouts</h3>
-            <button onClick={() => window.location.reload()} className={`text-sm ${isDarkMode ? 'text-brand-300 hover:text-brand-200' : 'text-brand-700 hover:text-brand-800'}`}>Refresh</button>
           </div>
           <ul className="mt-3 space-y-2">
             {data.similar.map((s: SearchResultModel, idx) => {
@@ -184,15 +193,20 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
                 <li key={(sw.id ?? idx) + 'sim'} className={`rounded-lg p-3 ring-1 ring-inset hover:translate-x-[1px] transition ${isDarkMode ? 'bg-white/5 ring-white/10 hover:bg-white/10' : 'bg-white ring-slate-200 hover:bg-slate-50'}`}>
                   <a href={path ?? sw.url ?? '#'} className="block">
                     <div className="flex items-center justify-between">
-                      <div className="font-medium truncate">
-                        {sw.workout_name || formatDateLabel(sw.date || null) || 'Workout'}
+                      <div className="font-medium">
+                        {sw.workout_name || 'Workout'}
                       </div>
                       {typeof s.similarity_score === 'number' ? (
                         <div className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>{(s.similarity_score * 100).toFixed(0)}%</div>
                       ) : null}
                     </div>
+                    {sw.date ? (
+                      <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {formatDateLabel(sw.date)}
+                      </div>
+                    ) : null}
                     {sw.one_sentence_summary ? (
-                      <div className={`mt-1 text-sm line-clamp-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>{sw.one_sentence_summary}</div>
+                      <div className={`mt-2 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>{sw.one_sentence_summary}</div>
                     ) : null}
                   </a>
                 </li>

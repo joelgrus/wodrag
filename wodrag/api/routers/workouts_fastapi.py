@@ -10,13 +10,13 @@ from pydantic import BaseModel
 
 from wodrag.api.main_fastapi import get_workout_repository
 from wodrag.api.models.responses import APIResponse
-from wodrag.api.models.workouts import SearchResultModel, WorkoutModel
+from wodrag.api.models.workouts import SearchResultModel, WorkoutResponseModel
 from wodrag.database.workout_repository import WorkoutRepository
 
 router = APIRouter(tags=["workouts"])
 
 class WorkoutWithSimilar(BaseModel):
-    workout: WorkoutModel
+    workout: WorkoutResponseModel  # Frontend-optimized without embeddings
     similar: list[SearchResultModel]
 
 
@@ -51,7 +51,7 @@ def get_workout_by_date(
         raise HTTPException(status_code=404, detail="Workout not found for date")
 
     # Build main workout model
-    workout_model = WorkoutModel(**workout.to_dict())
+    workout_model = WorkoutResponseModel(**workout.to_dict())
 
     similar_models: list[SearchResultModel] = []
     if similar_limit > 0 and workout.id is not None:
@@ -62,7 +62,7 @@ def get_workout_by_date(
             for s in similar:
                 similar_models.append(
                     SearchResultModel(
-                        workout=WorkoutModel(**s.workout.to_dict()),
+                        workout=WorkoutResponseModel(**s.workout.to_dict()),
                         similarity_score=s.similarity_score,
                         metadata_match=True,
                     )
