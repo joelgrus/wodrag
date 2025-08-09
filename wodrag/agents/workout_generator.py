@@ -84,7 +84,11 @@ class WorkoutSearchGenerator(dspy.Module):
             search_limit: Number of similar workouts to retrieve (default 10)
         """
         super().__init__()
-        self.repository = repository or WorkoutRepository()
+        if repository is None:
+            from wodrag.services.embedding_service import EmbeddingService
+            embedding_service = EmbeddingService()
+            repository = WorkoutRepository(embedding_service)
+        self.repository = repository
         self.search_limit = search_limit
         self.generator = WorkoutGenerator()
 
@@ -162,7 +166,11 @@ def generate_workout_from_search(
     search_generator = WorkoutSearchGenerator(repository, search_limit)
 
     # Get search results for transparency
-    repo = repository or WorkoutRepository()
+    if repository is None:
+        from wodrag.services.embedding_service import EmbeddingService
+        embedding_service = EmbeddingService()
+        repository = WorkoutRepository(embedding_service)
+    repo = repository
     if use_hybrid:
         search_results = repo.hybrid_search(description, limit=search_limit)
     else:

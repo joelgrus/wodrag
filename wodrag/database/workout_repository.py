@@ -3,19 +3,23 @@ from __future__ import annotations
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import date
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import psycopg2
 
 from .client import get_postgres_connection
 from .models import SearchResult, Workout, WorkoutFilter
 
+if TYPE_CHECKING:
+    from ..services.embedding_service import EmbeddingService
+
 
 class WorkoutRepository:
     """Repository for workout database operations."""
 
-    def __init__(self) -> None:
+    def __init__(self, embedding_service: EmbeddingService | None = None) -> None:
         self.table_name = "workouts"
+        self.embedding_service = embedding_service
 
     @contextmanager
     def _get_pg_connection(
@@ -255,10 +259,11 @@ class WorkoutRepository:
 
     def _generate_query_embedding(self, query_text: str) -> list[float]:
         """Generate embedding for search query."""
-        from ..services.embedding_service import EmbeddingService
-
-        embedding_service = EmbeddingService()
-        return embedding_service.generate_embedding(query_text)
+        if not self.embedding_service:
+            # Lazy initialization if not injected
+            from ..services.embedding_service import EmbeddingService
+            self.embedding_service = EmbeddingService()
+        return self.embedding_service.generate_embedding(query_text)
 
     def _execute_vector_similarity_query(
         self,

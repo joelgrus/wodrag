@@ -16,6 +16,7 @@ from wodrag.conversation.service import ConversationService
 from wodrag.conversation.storage import InMemoryConversationStore
 from wodrag.database.duckdb_client import DuckDBQueryService
 from wodrag.database.workout_repository import WorkoutRepository
+from wodrag.services.embedding_service import EmbeddingService
 
 # Global singleton instances - simple and clear!
 _conversation_config: ConversationConfig | None = None
@@ -23,6 +24,7 @@ _conversation_store: InMemoryConversationStore | None = None
 _rate_limiter: RateLimiter | None = None
 _global_rate_limiter: RateLimiter | None = None
 _conversation_service: ConversationService | None = None
+_embedding_service: EmbeddingService | None = None
 _workout_repository: WorkoutRepository | None = None
 _master_agent: Any | None = None
 _logging_configured: bool = False
@@ -121,11 +123,20 @@ def get_conversation_service() -> ConversationService:
     return _conversation_service
 
 
+def get_embedding_service() -> EmbeddingService:
+    """Get singleton embedding service."""
+    global _embedding_service
+    if _embedding_service is None:
+        _embedding_service = EmbeddingService()
+    return _embedding_service
+
+
 def get_workout_repository() -> WorkoutRepository:
     """Get singleton workout repository."""
     global _workout_repository
     if _workout_repository is None:
-        _workout_repository = WorkoutRepository()
+        embedding_service = get_embedding_service()
+        _workout_repository = WorkoutRepository(embedding_service)
     return _workout_repository
 
 

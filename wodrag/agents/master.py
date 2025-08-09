@@ -300,7 +300,7 @@ Current question: {question}"""
         else:
             result = self.react(question=enhanced_question)
 
-        print(dspy.inspect_history(n=5))
+        # print(dspy.inspect_history(n=5))
 
         return str(result.answer)
 
@@ -384,7 +384,9 @@ if __name__ == "__main__":
     dspy.settings.configure(show_guidelines=True)
 
     # Initialize services once
-    workout_repo = WorkoutRepository()
+    from wodrag.services.embedding_service import EmbeddingService
+    embedding_service = EmbeddingService()
+    workout_repo = WorkoutRepository(embedding_service)
     query_generator = QueryGenerator()
     duckdb_service = DuckDBQueryService()
     workout_generator = WorkoutSearchGenerator()
