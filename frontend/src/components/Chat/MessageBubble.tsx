@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ChatMessage } from '../../types/api';
+import { replaceDatesWithLinks } from '../../utils/workoutLinks';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -16,6 +17,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isDarkMode }) =>
       minute: '2-digit' 
     });
   };
+
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -68,7 +70,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, isDarkMode }) =>
                     ),
                   }}
                 >
-                  {message.content}
+                  {replaceDatesWithLinks(message.content)}
                 </ReactMarkdown>
               </div>
             ) : (
