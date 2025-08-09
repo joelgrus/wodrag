@@ -45,8 +45,19 @@ What would you like to research?`,
   useEffect(() => {
     if (resetTrigger && resetTrigger > 0) {
       setChatState(getInitialState());
+      // Focus the input after resetting
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
     }
   }, [resetTrigger]);
+
+  // Focus input on initial mount
+  useEffect(() => {
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+  }, []);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
