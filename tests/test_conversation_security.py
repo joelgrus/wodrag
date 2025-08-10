@@ -277,7 +277,7 @@ class TestSecurityIntegration:
         )  # No requests allowed
         service = ConversationService(store=storage, rate_limiter=rate_limiter)
 
-        with pytest.raises(ConversationValidationError, match="Rate limit exceeded"):
+        with pytest.raises(ConversationValidationError, match="You're sending requests too quickly"):
             service.add_user_message(
                 "test-conv", "Test message", client_identifier="test-client"
             )
