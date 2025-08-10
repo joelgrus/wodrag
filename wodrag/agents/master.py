@@ -215,9 +215,10 @@ class MasterAgent(dspy.Module):
 
             Rules:
             - Never pass any arguments to the tool named 'finish'. Call it with {} only.
-            - When calling very_keyword_search or very_semantic_search, paste the tool's returned lines verbatim as your final answer.
+            - Don't offer more information than the user asks for. For example, if the user
+              asks for the date of a specific workout, only return the date. If they ask for
+              the details of the workout, provide those too.
             - The frontend will handle creating clickable links for workout names and dates.
-            - Do not paraphrase or modify the tool output; keep the bullets as-is.
             """
             question: str = dspy.InputField()
             history: dspy.History = dspy.InputField()
