@@ -63,13 +63,6 @@ function normalizeDate(year: string, month: string, day: string): { year: string
 export function replaceDatesWithLinks(content: string): string {
   // Pattern collection for various date formats
   const patterns = [
-    // "WorkoutName (YYYY-MM-DD)" - most specific, process first
-    {
-      regex: /\b([A-Z][A-Za-z\s]+?)\s*\((\d{4})-(\d{2})-(\d{2})\)/g,
-      replacer: (match: string, name: string, year: string, month: string, day: string) => {
-        return `[${name.trim()} (${year}-${month}-${day})](#/workouts/${year}/${month}/${day})`;
-      }
-    },
     // "Month DD, YYYY" or "Month DDth, YYYY"
     {
       regex: /\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4}|\d{2})\b/gi,
