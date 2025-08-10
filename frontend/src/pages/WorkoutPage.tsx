@@ -26,6 +26,102 @@ function dateToHashPath(iso?: string | null): string | null {
   return `#/workouts/${y}/${m}/${d}`;
 }
 
+function formatWorkoutText(text: string): React.ReactNode {
+  // Clean up common formatting issues
+  let cleaned = text
+    // Remove isolated brackets from broken links like "[\narticle\n]"
+    .replace(/\[\s*\n\s*([^\]]+)\s*\n\s*\]/g, '[$1]')
+    // Clean up excessive newlines around quotes
+    .replace(/"\s*\n+\s*/g, '" ')
+    .replace(/\s*\n+\s*"/g, ' "')
+    // Normalize multiple newlines to max 2
+    .replace(/\n{3,}/g, '\n\n')
+    // Clean up spaces before/after newlines
+    .replace(/ +\n/g, '\n')
+    .replace(/\n +/g, '\n')
+    // Fix common patterns like "5 rounds for time of:\n15 pull-ups"
+    .replace(/:\s*\n+/g, ':\n')
+    // Clean up numbered lists
+    .replace(/(\d+\.)\s*\n+/g, '$1 ');
+
+  // Function to convert YYMMDD dates to links
+  const convertDatesToLinks = (content: string): React.ReactNode[] => {
+    // Pattern for YYMMDD format (6 consecutive digits)
+    const datePattern = /\b(\d{6})\b/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = datePattern.exec(content)) !== null) {
+      const dateStr = match[1];
+      // Parse YYMMDD
+      const yy = parseInt(dateStr.substring(0, 2));
+      const mm = parseInt(dateStr.substring(2, 4));
+      const dd = parseInt(dateStr.substring(4, 6));
+      
+      // Convert 2-digit year to 4-digit (00-99 -> 2000-2099)
+      const yyyy = yy < 50 ? 2000 + yy : 1900 + yy;
+      
+      // Validate date
+      if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+        // Add text before the date
+        if (match.index > lastIndex) {
+          parts.push(content.substring(lastIndex, match.index));
+        }
+        
+        // Add the date as a link
+        const linkPath = `#/workouts/${yyyy}/${String(mm).padStart(2, '0')}/${String(dd).padStart(2, '0')}`;
+        parts.push(
+          <a 
+            key={match.index} 
+            href={linkPath}
+            className="text-brand-600 hover:text-brand-700 underline"
+          >
+            {dateStr}
+          </a>
+        );
+        
+        lastIndex = match.index + match[0].length;
+      }
+    }
+    
+    // Add remaining text
+    if (lastIndex < content.length) {
+      parts.push(content.substring(lastIndex));
+    }
+    
+    return parts.length > 0 ? parts : [content];
+  };
+
+  // Split by double newlines to identify paragraphs/sections
+  const paragraphs = cleaned.split(/\n\n+/);
+  
+  return paragraphs.map((paragraph, idx) => {
+    // For regular content, preserve line breaks within the paragraph
+    const lines = paragraph.split('\n');
+    
+    // If it's a single short line, might be a header or title
+    if (lines.length === 1 && lines[0].length < 50) {
+      return (
+        <div key={idx} className="font-medium mb-2">
+          {convertDatesToLinks(lines[0])}
+        </div>
+      );
+    }
+    
+    return (
+      <div key={idx} className="mb-3">
+        {lines.map((line, lineIdx) => (
+          <React.Fragment key={lineIdx}>
+            {convertDatesToLinks(line)}
+            {lineIdx < lines.length - 1 && <br />}
+          </React.Fragment>
+        ))}
+      </div>
+    );
+  });
+}
+
 const SectionCard: React.FC<{ isDarkMode: boolean; children: React.ReactNode; className?: string }> = ({ isDarkMode, children, className }) => (
   <div className={`rounded-xl ring-1 ring-inset ${isDarkMode ? 'bg-white/5 ring-white/10' : 'bg-white ring-slate-200'} ${className ?? ''}`}>{children}</div>
 );
@@ -128,6 +224,25 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
           <h2 className="text-xl font-semibold">{title}</h2>
           <div className={isDarkMode ? 'text-gray-400' : 'text-gray-500'}>{dateLabel}</div>
           <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => {
+                if (!w.date) return;
+                const currentDate = new Date(w.date + 'T00:00:00');
+                const prevDate = new Date(currentDate);
+                prevDate.setDate(currentDate.getDate() - 1);
+                const iso = prevDate.toISOString().split('T')[0];
+                const [y, m, d] = iso.split('-');
+                if (y && m && d) {
+                  window.location.hash = `#/workouts/${y}/${m}/${d}`;
+                }
+              }}
+              className={`p-1 rounded-md hover:scale-105 transition-transform ${isDarkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-white/5' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+              title="Previous day"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 18l-6-6 6-6"/>
+              </svg>
+            </button>
             <input
               type="date"
               value={w.date ?? ''}
@@ -140,6 +255,25 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
               }}
               className={`px-2 py-1 rounded-md ring-1 ring-inset text-sm ${isDarkMode ? 'bg-white/5 text-gray-100 ring-white/10' : 'bg-white text-gray-900 ring-slate-300'}`}
             />
+            <button
+              onClick={() => {
+                if (!w.date) return;
+                const currentDate = new Date(w.date + 'T00:00:00');
+                const nextDate = new Date(currentDate);
+                nextDate.setDate(currentDate.getDate() + 1);
+                const iso = nextDate.toISOString().split('T')[0];
+                const [y, m, d] = iso.split('-');
+                if (y && m && d) {
+                  window.location.hash = `#/workouts/${y}/${m}/${d}`;
+                }
+              }}
+              className={`p-1 rounded-md hover:scale-105 transition-transform ${isDarkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-white/5' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+              title="Next day"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 18l6-6-6-6"/>
+              </svg>
+            </button>
           </div>
         </div>
 {(() => {
@@ -170,13 +304,17 @@ const WorkoutPage: React.FC<WorkoutPageProps> = ({ isDarkMode }) => {
             {w.workout ? (
               <div>
                 <div className={`text-sm uppercase tracking-wide ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Workout</div>
-                <div className={`whitespace-pre-wrap leading-relaxed ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{w.workout}</div>
+                <div className={`leading-relaxed ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                  {formatWorkoutText(w.workout)}
+                </div>
               </div>
             ) : null}
             {w.scaling ? (
               <div>
                 <div className={`text-sm uppercase tracking-wide ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>Scaling</div>
-                <div className={`whitespace-pre-wrap leading-relaxed ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{w.scaling}</div>
+                <div className={`leading-relaxed ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+                  {formatWorkoutText(w.scaling)}
+                </div>
               </div>
             ) : null}
           </div>
