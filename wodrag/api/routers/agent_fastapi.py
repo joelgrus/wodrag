@@ -127,14 +127,14 @@ async def query_agent(
             # Each message should have question/answer keys for our signature
             role = msg.get("role", "user")
             content = msg.get("content", "")
-            
+
             if role == "user":
                 # For user messages, we'll store as question
                 history_messages.append({"question": content, "answer": ""})
             elif role == "assistant" and history_messages:
                 # For assistant messages, fill in the answer for the last question
                 history_messages[-1]["answer"] = content
-        
+
         history = dspy.History(messages=history_messages)
 
         logging.debug("Calling master agent with verbose=%s", data.verbose)

@@ -9,9 +9,8 @@ from __future__ import annotations
 
 import os
 from contextvars import ContextVar
-from typing import Any
-
 from types import MethodType
+from typing import Any
 
 from wodrag.conversation.models import ConversationValidationError
 

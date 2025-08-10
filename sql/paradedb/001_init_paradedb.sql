@@ -29,9 +29,9 @@ CREATE TABLE workouts (
     workout_embedding vector(1536),
     summary_embedding vector(1536),
     
-    -- Constraints
-    CONSTRAINT chk_workout_type CHECK (workout_type IN (
-        'strength', 'metcon', 'endurance', 'skill', 'benchmark', 'hero', 'girl'
+    -- Constraints: keep broad enough to cover corpus
+    CONSTRAINT chk_workout_type CHECK (workout_type IS NULL OR workout_type IN (
+        'strength', 'metcon', 'endurance', 'skill', 'benchmark', 'hero', 'girl', 'rest day'
     ))
 );
 
