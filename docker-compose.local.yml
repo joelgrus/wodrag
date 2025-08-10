@@ -1,0 +1,14 @@
+services:
+  frontend:
+    # Use dev Caddyfile to avoid TLS/ACME locally
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile.dev:ro
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile.dev", "--adapter", "caddyfile"]
+
+  # Optional: expose Postgres locally if needed
+  postgres:
+    ports:
+      - "5432:5432"
+

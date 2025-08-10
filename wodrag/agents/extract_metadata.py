@@ -37,8 +37,12 @@ class ExtractMetadata(dspy.Signature):
     workout_type: WorkoutType = dspy.OutputField(
         description="Type of workout (e.g., 'strength', 'cardio')."
     )
-    workout_name: str | None = dspy.OutputField(
-        description="Name of the workout, if available."
+    workout_name: str = dspy.OutputField(
+        description=("The name of the workout. Some workouts have official names, e.g. Murph, Fran, etc "
+                     "Some workouts have 'titles' (e.g. 'Barbell Mania') you can use those as the names. "
+                     "If no official name is found, make up a name based on the workout description. "
+                     "nb some workout descriptions have names of people in them, e.g. 'John Smith did this in 4:31' "
+                     "those are not workout names, so don't use them.")
     )
     one_sentence_summary: str = dspy.OutputField(
         description="A one-sentence summary of the workout."

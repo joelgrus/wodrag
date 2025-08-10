@@ -33,8 +33,8 @@ from openai import OpenAI
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from wodrag.agents.extract_metadata import extractor
-from wodrag.data_processing.downloader import download_workout_month
-from wodrag.data_processing.extractor import extract_workouts_from_month
+from wodrag.data_processing.downloader import download_month
+from wodrag.data_processing.extractor import extract_workouts_from_file
 from wodrag.data_processing.simple_parser import parse_workout_simple
 from wodrag.database.client import get_postgres_connection
 from wodrag.services.embedding_service import EmbeddingService
@@ -138,16 +138,24 @@ def process_month(year_month: str, force_redownload: bool = False) -> int:
     year, month = year_month.split("-")
 
     # 1. Download month data
-    month_file = f"data/raw/{year_month}.html"
-    if force_redownload or not os.path.exists(month_file):
-        success = download_workout_month(int(year), int(month))
+    from pathlib import Path
+    output_dir = Path("data/raw")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    if force_redownload or not (output_dir / f"{year_month}.html").exists():
+        success = download_month(int(year), int(month), output_dir)
         if not success:
             return 0
 
     # 2. Extract workouts from HTML
-    workouts = extract_workouts_from_month(year_month)
+    from pathlib import Path
+    html_file = Path("data/raw") / f"{year_month}.html"
+    workouts = extract_workouts_from_file(html_file)
     if not workouts:
         return 0
+    
+    # Convert to dict format
+    workouts = [workout.asdict() for workout in workouts]
 
     # 3. Process each workout
     openai_client = get_openai_client()

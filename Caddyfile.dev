@@ -1,11 +1,10 @@
-# Caddy configuration for wodrag.com
+# Caddy configuration for local development (no TLS/ACME)
 
 {
-  # Optional global options
-  email admin@wodrag.com
+  auto_https off
 }
 
-wodrag.com, www.wodrag.com {
+:80 {
   encode zstd gzip
 
   # Explicit routing: API first, then SPA
@@ -38,33 +37,7 @@ wodrag.com, www.wodrag.com {
   header @static Cache-Control "public, max-age=31536000, immutable"
 
   log {
-    output file /data/log/access.log {
-      roll_size 50MB
-      roll_keep 5
-      roll_keep_for 168h
-    }
+    output stdout
     format console
-  }
-}
-
-# Local development (no TLS): bind to :80
-:80 {
-  encode zstd gzip
-  route {
-    handle /api/* {
-      reverse_proxy backend:8000 {
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Real-IP {remote_host}
-        header_up Host {host}
-        transport http {
-          response_header_timeout 60s
-        }
-      }
-    }
-    handle {
-      root * /usr/share/caddy
-      try_files {path} /index.html
-      file_server
-    }
   }
 }
