@@ -227,12 +227,16 @@ class MasterAgent(dspy.Module):
         logging.info(f"Creating ReAct with {len(self.tools)} tools")
 
         class QA(dspy.Signature):
-            """Answer the question.
+            """Answer the question based on conversation history.
             
             Rules:
             - Never pass any arguments to the tool named 'finish'. Call it with {} only.
+            - When calling very_keyword_search or very_semantic_search, paste the tool's returned lines verbatim as your final answer.
+            - The tool output already contains Markdown links to workout details.
+            - Do not paraphrase or remove links; keep the bullets as-is.
             """
             question: str = dspy.InputField()
+            history: dspy.History = dspy.InputField()
             answer: str = dspy.OutputField()
 
  
@@ -278,97 +282,28 @@ class MasterAgent(dspy.Module):
     def forward(
         self,
         question: str,
-        conversation_context: list[dict[str, str]] | None = None,
-        verbose: bool = False,
+        history: dspy.History,
     ) -> str:
-        """Answer a question using ReAct with optional conversation context."""
-        # If we have conversation context, incorporate it into the question
-        if conversation_context and len(conversation_context) > 0:
-            # Format conversation history
-            context_str = self._format_conversation_context(conversation_context)
-            enhanced_question = f"""Based on our previous conversation:
-{context_str}
-
-Current question: {question}"""
-        else:
-            enhanced_question = question
-
-        if verbose:
-            # Enable DSPy's built-in verbose mode
-            with dspy.context(show_guidelines=True):
-                result = self.react(question=enhanced_question)
-        else:
-            result = self.react(question=enhanced_question)
-
-        # print(dspy.inspect_history(n=5))
-
+        """Answer a question using ReAct with conversation history."""
+        # Call ReAct with the question and history
+        result = self.react(question=question, history=history)
         return str(result.answer)
 
-    def _format_conversation_context(self, context: list[dict[str, str]]) -> str:
-        """Format conversation context for inclusion in the prompt."""
-        formatted_messages = []
-        for msg in context:
-            role = msg.get("role", "unknown")
-            content = msg.get("content", "")
-            if role == "user":
-                formatted_messages.append(f"Human: {content}")
-            elif role == "assistant":
-                formatted_messages.append(f"Assistant: {content}")
-
-        return "\n".join(formatted_messages)
 
     def forward_verbose(
-        self, question: str, conversation_context: list[dict[str, str]] | None = None
+        self, question: str, history: dspy.History
     ) -> tuple[str, list[str]]:
-        """Answer a question using ReAct and return the reasoning trace."""
-        # Custom implementation to capture the ReAct steps
-        trace = []
+        """Answer a question using ReAct and return the reasoning trace.
+        
+        Note: This method exists for backward compatibility.
+        Consider using forward() with dspy.inspect_history() for debugging.
+        """
+        # For now, just call forward and return a simple trace
+        # TODO: Implement proper trace capture if needed
+        answer = self.forward(question=question, history=history)
+        trace = ["Verbose mode: Use dspy.inspect_history() for detailed trace"]
+        return answer, trace
 
-        # Format question with conversation context if provided
-        if conversation_context and len(conversation_context) > 0:
-            context_str = self._format_conversation_context(conversation_context)
-            enhanced_question = f"""Based on our previous conversation:
-{context_str}
-
-Current question: {question}"""
-        else:
-            enhanced_question = question
-
-        enhanced_question = (
-            enhanced_question
-            + "\n\nFormatting requirements for lists:" \
-            + " When you call very_keyword_search or very_semantic_search," \
-            + " paste the tool's returned lines verbatim as your final answer." \
-            + " The tool output already contains Markdown links to workout details." \
-            + " Do not paraphrase or remove links; keep the bullets as-is."
-        )
-
-        # Create wrapper function for tools
-        def wrap_tool(tool: Any) -> Any:
-            original_func = tool.func
-
-            def wrapped_func(*args: Any, **kwargs: Any) -> str:
-                input_str = f"{args[0] if args else kwargs}"
-                trace.append(f"ACTION: {tool.name}({input_str})")
-                result = original_func(*args, **kwargs)
-                trace.append(
-                    f"OBSERVATION: {result[:200]}{'...' if len(result) > 200 else ''}"
-                )
-                return str(result)
-
-            return dspy.Tool(name=tool.name, desc=tool.desc, func=wrapped_func)
-
-        # Create wrapped tools
-        wrapped_tools = [wrap_tool(tool) for tool in self.tools]
-
-        # Temporarily replace tools
-        react_with_trace = dspy.ReAct(
-            signature="question -> answer", tools=wrapped_tools, max_iters=5
-        )
-
-        result = react_with_trace(question=enhanced_question)
-
-        return result.answer, trace
 
 
 if __name__ == "__main__":

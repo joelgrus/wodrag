@@ -3,6 +3,7 @@
 import logging
 from typing import Any
 
+import dspy  # type: ignore
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
@@ -119,11 +120,28 @@ async def query_agent(
             len(conversation_context),
         )
 
+        # Convert conversation context to DSPy History format
+        history_messages = []
+        for msg in conversation_context:
+            # Convert to format expected by dspy.History
+            # Each message should have question/answer keys for our signature
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            
+            if role == "user":
+                # For user messages, we'll store as question
+                history_messages.append({"question": content, "answer": ""})
+            elif role == "assistant" and history_messages:
+                # For assistant messages, fill in the answer for the last question
+                history_messages[-1]["answer"] = content
+        
+        history = dspy.History(messages=history_messages)
+
         logging.debug("Calling master agent with verbose=%s", data.verbose)
         if data.verbose:
             # Get answer with reasoning trace
             answer, trace = master_agent.forward_verbose(
-                data.question, conversation_context=conversation_context
+                data.question, history=history
             )
             logging.debug("Got verbose answer: %s...", answer[:50])
             response_data = AgentQueryResponse(
@@ -137,8 +155,7 @@ async def query_agent(
             # Get simple answer
             answer = master_agent.forward(
                 data.question,
-                conversation_context=conversation_context,
-                verbose=False,
+                history=history,
             )
             logging.debug("Got answer: %s...", answer[:50])
             response_data = AgentQueryResponse(
