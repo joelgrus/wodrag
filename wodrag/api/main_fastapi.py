@@ -2,8 +2,8 @@
 
 import logging
 import os
-from functools import lru_cache
 import threading
+from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from typing import Any
 
@@ -160,12 +160,30 @@ def get_master_agent(
     if not hasattr(dspy.settings, "lm") or dspy.settings.lm is None:
         import os
 
-        # Use OpenRouter Gemini Flash Lite (cost effective and fast)
-        base_lm = dspy.LM(
-            "openrouter/google/gemini-2.5-flash-lite",
-            api_key=os.getenv("OPENROUTER_API_KEY"),
-            max_tokens=10000,
-        )
+        # Get model from environment or use default
+        model_name = os.getenv("WODRAG_LM_MODEL", "openrouter/google/gemini-2.5-flash-lite")
+        
+        # Configure LM with appropriate API key based on provider
+        if model_name.startswith("openrouter/"):
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    f"OPENROUTER_API_KEY environment variable is required for model '{model_name}'. "
+                    "Please set it in your .env file or environment."
+                )
+            base_lm = dspy.LM(model_name, api_key=api_key, max_tokens=10000)
+        elif model_name.startswith("openai/"):
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    f"OPENAI_API_KEY environment variable is required for model '{model_name}'. "
+                    "Please set it in your .env file or environment."
+                )
+            base_lm = dspy.LM(model_name, api_key=api_key, max_tokens=10000)
+        else:
+            # For other providers or local models that might not need API keys
+            base_lm = dspy.LM(model_name, max_tokens=10000)
+        
         # Wrap LM with per-request budget enforcement and configure
         wrap_lm_for_budget(base_lm)
         dspy.configure(lm=base_lm)
