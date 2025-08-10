@@ -61,52 +61,39 @@ function normalizeDate(year: string, month: string, day: string): { year: string
  * Replace dates in text with markdown links to workout pages
  */
 export function replaceDatesWithLinks(content: string): string {
-  // Pattern collection for various date formats
   const patterns = [
-    // "Month DD, YYYY" or "Month DDth, YYYY"
+    // YYYY-MM-DD
     {
-      regex: /\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4}|\d{2})\b/gi,
-      replacer: (match: string, month: string, day: string, year: string) => {
-        const normalized = normalizeDate(year, month, day);
-        if (!normalized) return match;
-        return `[${match}](#/workouts/${normalized.year}/${normalized.month}/${normalized.day})`;
-      }
-    },
-    // "DD Month YYYY" or "DDth Month YYYY" (European style)
-    {
-      regex: /\b(\d{1,2})(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{4}|\d{2})\b/gi,
-      replacer: (match: string, day: string, month: string, year: string) => {
-        const normalized = normalizeDate(year, month, day);
-        if (!normalized) return match;
-        return `[${match}](#/workouts/${normalized.year}/${normalized.month}/${normalized.day})`;
-      }
-    },
-    // "MM/DD/YYYY" or "MM-DD-YYYY"
-    {
-      regex: /\b(\d{1,2})[/-](\d{1,2})[/-](\d{4}|\d{2})\b/g,
-      replacer: (match: string, month: string, day: string, year: string) => {
-        const normalized = normalizeDate(year, month, day);
-        if (!normalized) return match;
-        return `[${match}](#/workouts/${normalized.year}/${normalized.month}/${normalized.day})`;
-      }
-    },
-    // "YYYY-MM-DD" (ISO format)
-    {
-      regex: /\b(\d{4})-(\d{2})-(\d{2})\b/g,
+      regex: /(\d{4})-(\d{2})-(\d{2})/g,
       replacer: (match: string, year: string, month: string, day: string) => {
-        // Check if this is already part of a markdown link
-        const beforeMatch = content.substring(0, content.indexOf(match));
-        if (beforeMatch.endsWith('(') || beforeMatch.endsWith('#/workouts/')) {
-          return match; // Already in a link
-        }
         return `[${match}](#/workouts/${year}/${month}/${day})`;
+      }
+    },
+    // "Month Day, Year"
+    {
+      regex: /\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s+(\d{4})\b/gi,
+      replacer: (match: string, month: string, day: string, year: string) => {
+        const normalized = normalizeDate(year, month, day);
+        if (!normalized) return match;
+        return `[${match}](#/workouts/${normalized.year}/${normalized.month}/${normalized.day})`;
+      }
+    },
+    // YYMMDD
+    {
+      regex: /\b(\d{6})\b/g,
+      replacer: (match: string, yymmdd: string) => {
+        const year = yymmdd.slice(0, 2);
+        const month = yymmdd.slice(2, 4);
+        const day = yymmdd.slice(4, 6);
+        const normalized = normalizeDate(year, month, day);
+        if (!normalized) return match;
+        return `[${match}](#/workouts/${normalized.year}/${normalized.month}/${normalized.day})`;
       }
     }
   ];
 
   let processedContent = content;
 
-  // Apply patterns in order (most specific first)
   for (const pattern of patterns) {
     processedContent = processedContent.replace(pattern.regex, pattern.replacer as any);
   }
