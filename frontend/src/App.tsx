@@ -24,8 +24,9 @@ function App() {
 
   const handleNewChat = () => {
     // Navigate to root and reset chat
-    if (window.location.pathname !== '/') {
-      window.history.pushState({}, '', '/');
+    const currentPath = getPath();
+    if (currentPath !== '/') {
+      window.location.hash = '';
       setPath('/');
     }
     setResetTrigger(prev => prev + 1);

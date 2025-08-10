@@ -54,20 +54,11 @@ class MasterAgent(dspy.Module):
                     w.workout[:100] if w.workout else ""
                 )
                 name = w.workout_name or "Workout"
-                link = name
                 if w.date:
-                    try:
-                        # Support both date objects and ISO strings
-                        if hasattr(w.date, "isoformat"):
-                            date_iso = w.date.isoformat()
-                        else:
-                            date_iso = str(w.date)
-                        y, m, d = [str(part).zfill(2) for part in date_iso.split("-")]
-                        link = f"[{name} ({y}-{m}-{d})](#/workouts/{y}/{m}/{d})"
-                    except Exception:
-                        # Fallback to plain text if parsing fails
-                        link = f"{name} ({w.date})"
-                output.append(f"- {link}: {summary}")
+                    display_name = f"{name} ({w.date})"
+                else:
+                    display_name = name
+                output.append(f"- {display_name}: {summary}")
             return "\n".join(output)
 
         def very_semantic_search(query: str) -> str:
@@ -86,18 +77,11 @@ class MasterAgent(dspy.Module):
                     w.workout[:100] if w.workout else ""
                 )
                 name = w.workout_name or "Workout"
-                link = name
                 if w.date:
-                    try:
-                        if hasattr(w.date, "isoformat"):
-                            date_iso = w.date.isoformat()
-                        else:
-                            date_iso = str(w.date)
-                        y, m, d = [str(part).zfill(2) for part in date_iso.split("-")]
-                        link = f"[{name} ({y}-{m}-{d})](#/workouts/{y}/{m}/{d})"
-                    except Exception:
-                        link = f"{name} ({w.date})"
-                output.append(f"- {link}: {summary}")
+                    display_name = f"{name} ({w.date})"
+                else:
+                    display_name = name
+                output.append(f"- {display_name}: {summary}")
             return "\n".join(output)
 
         def details_by_date(date_str: str) -> str:
@@ -228,18 +212,18 @@ class MasterAgent(dspy.Module):
 
         class QA(dspy.Signature):
             """Answer the question based on conversation history.
-            
+
             Rules:
             - Never pass any arguments to the tool named 'finish'. Call it with {} only.
             - When calling very_keyword_search or very_semantic_search, paste the tool's returned lines verbatim as your final answer.
-            - The tool output already contains Markdown links to workout details.
-            - Do not paraphrase or remove links; keep the bullets as-is.
+            - The frontend will handle creating clickable links for workout names and dates.
+            - Do not paraphrase or modify the tool output; keep the bullets as-is.
             """
             question: str = dspy.InputField()
             history: dspy.History = dspy.InputField()
             answer: str = dspy.OutputField()
 
- 
+
         self.react = dspy.ReAct(
             signature=QA, tools=self.tools, max_iters=5
         )
@@ -294,7 +278,7 @@ class MasterAgent(dspy.Module):
         self, question: str, history: dspy.History
     ) -> tuple[str, list[str]]:
         """Answer a question using ReAct and return the reasoning trace.
-        
+
         Note: This method exists for backward compatibility.
         Consider using forward() with dspy.inspect_history() for debugging.
         """

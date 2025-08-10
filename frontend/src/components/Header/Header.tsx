@@ -22,9 +22,13 @@ const Header: React.FC<HeaderProps> = ({ isDarkMode, onToggleTheme, onNewChat })
       <div className="mx-auto max-w-6xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <a href="#/" className="w-9 h-9 hover:scale-105 transition-transform" aria-label="Go to home">
+            <button 
+              onClick={handleNewChat}
+              className="w-9 h-9 hover:scale-105 transition-transform" 
+              aria-label="Go to home and start new chat"
+            >
               <WodragLogo />
-            </a>
+            </button>
             <div>
               <div className="text-sm uppercase tracking-wider font-semibold text-brand-600">Wodrag</div>
               <h1 className="leading-tight font-semibold text-base sm:text-lg">
