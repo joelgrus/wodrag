@@ -31,8 +31,8 @@ docker exec -i "${PG_CONTAINER}" psql -U postgres -d postgres -c "GRANT CONNECT 
 # Minimal privileges inside the DB
 docker exec -i "${PG_CONTAINER}" psql -U postgres -d "${DB_NAME}" -c "GRANT USAGE ON SCHEMA public TO wodrag_ro;"
 
-# Grant on paradedb schema if it exists
-docker exec -i "${PG_CONTAINER}" psql -U postgres -d "${DB_NAME}" -c "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'paradedb') THEN EXECUTE 'GRANT USAGE ON SCHEMA paradedb TO wodrag_ro'; END IF; END $$;"
+# Grant on paradedb schema (ignore if schema not present)
+docker exec -i "${PG_CONTAINER}" psql -U postgres -d "${DB_NAME}" -c "GRANT USAGE ON SCHEMA paradedb TO wodrag_ro;" || true
 
 # Table read access + default privileges
 docker exec -i "${PG_CONTAINER}" psql -U postgres -d "${DB_NAME}" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO wodrag_ro;"
