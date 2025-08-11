@@ -16,13 +16,14 @@ fi
 DB_NAME=${DB_NAME:-wodrag}
 PG_CONTAINER=${PG_CONTAINER:-wodrag_paradedb}
 
-# Escape single quotes for SQL literal
-ESC_PWD=${RO_PWD//\'/''}
 
 echo "Creating/updating read-only role 'wodrag_ro' on database '${DB_NAME}' in container '${PG_CONTAINER}'..."
 
-# Create or update role with password
-docker exec -i "${PG_CONTAINER}" psql -U postgres -d postgres -c "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'wodrag_ro') THEN CREATE ROLE wodrag_ro LOGIN PASSWORD '${ESC_PWD}'; ELSE ALTER ROLE wodrag_ro LOGIN PASSWORD '${ESC_PWD}'; END IF; END $$;"
+# Create role if missing (ignore error if exists)
+docker exec -i "${PG_CONTAINER}" psql -U postgres -d postgres -c 'CREATE ROLE wodrag_ro LOGIN PASSWORD $$'"${RO_PWD}"'$$;' || true
+
+# Ensure/refresh password
+docker exec -i "${PG_CONTAINER}" psql -U postgres -d postgres -c 'ALTER ROLE wodrag_ro LOGIN PASSWORD $$'"${RO_PWD}"'$$;'
 
 # Allow connecting to the target DB
 docker exec -i "${PG_CONTAINER}" psql -U postgres -d postgres -c "GRANT CONNECT ON DATABASE ${DB_NAME} TO wodrag_ro;"
