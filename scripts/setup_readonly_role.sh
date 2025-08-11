@@ -16,45 +16,29 @@ fi
 DB_NAME=${DB_NAME:-wodrag}
 PG_CONTAINER=${PG_CONTAINER:-wodrag_paradedb}
 
+# Escape single quotes for SQL literal
+ESC_PWD=${RO_PWD//\'/''}
+
 echo "Creating/updating read-only role 'wodrag_ro' on database '${DB_NAME}' in container '${PG_CONTAINER}'..."
 
-docker exec -i "${PG_CONTAINER}" psql -U postgres -d postgres -v ro_password="${RO_PWD}" -v db_name="${DB_NAME}" <<'SQL'
--- Create role if missing, then ensure password
-DO $do$
-BEGIN
-   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'wodrag_ro') THEN
-      CREATE ROLE wodrag_ro LOGIN PASSWORD :'ro_password';
-   END IF;
-END
-$do$;
+# Create or update role with password
+docker exec -i "${PG_CONTAINER}" psql -U postgres -d postgres -c "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'wodrag_ro') THEN CREATE ROLE wodrag_ro LOGIN PASSWORD '${ESC_PWD}'; ELSE ALTER ROLE wodrag_ro LOGIN PASSWORD '${ESC_PWD}'; END IF; END $$;"
 
-ALTER ROLE wodrag_ro LOGIN PASSWORD :'ro_password';
+# Allow connecting to the target DB
+docker exec -i "${PG_CONTAINER}" psql -U postgres -d postgres -c "GRANT CONNECT ON DATABASE ${DB_NAME} TO wodrag_ro;"
 
--- Allow connecting to the database
-GRANT CONNECT ON DATABASE :"db_name" TO wodrag_ro;
+# Minimal privileges inside the DB
+docker exec -i "${PG_CONTAINER}" psql -U postgres -d "${DB_NAME}" -c "GRANT USAGE ON SCHEMA public TO wodrag_ro;"
 
-\connect :"db_name"
+# Grant on paradedb schema if it exists
+docker exec -i "${PG_CONTAINER}" psql -U postgres -d "${DB_NAME}" -c "DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'paradedb') THEN EXECUTE 'GRANT USAGE ON SCHEMA paradedb TO wodrag_ro'; END IF; END $$;"
 
--- Minimal privileges to read data
-GRANT USAGE ON SCHEMA public TO wodrag_ro;
--- Grant on paradedb schema if it exists (ignore errors if not present)
-DO $do$
-BEGIN
-   IF EXISTS (
-     SELECT 1 FROM information_schema.schemata WHERE schema_name = 'paradedb'
-   ) THEN
-     EXECUTE 'GRANT USAGE ON SCHEMA paradedb TO wodrag_ro';
-   END IF;
-END
-$do$;
+# Table read access + default privileges
+docker exec -i "${PG_CONTAINER}" psql -U postgres -d "${DB_NAME}" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO wodrag_ro;"
+docker exec -i "${PG_CONTAINER}" psql -U postgres -d "${DB_NAME}" -c "ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT ON TABLES TO wodrag_ro;"
 
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO wodrag_ro;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT ON TABLES TO wodrag_ro;
-
--- Belt and suspenders: make sessions read-only by default
-ALTER ROLE wodrag_ro SET default_transaction_read_only = on;
-SQL
+# Make sessions read-only by default
+docker exec -i "${PG_CONTAINER}" psql -U postgres -d postgres -c "ALTER ROLE wodrag_ro SET default_transaction_read_only = on;"
 
 echo "Done. Ensure POSTGRES_RO_PASSWORD is set in your prod .env, then restart backend:"
 echo "  docker compose -f docker-compose.prod.yml up -d --build backend"
-
