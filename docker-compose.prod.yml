@@ -24,7 +24,8 @@ services:
       dockerfile: Dockerfile.backend
     container_name: wodrag_backend
     environment:
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/wodrag
+      # Use read-only DB user in production
+      DATABASE_URL: postgresql://wodrag_ro:${POSTGRES_RO_PASSWORD}@postgres:5432/wodrag?options=-c%20default_transaction_read_only%3Don
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       WODRAG_API_HOST: 0.0.0.0
